@@ -4,7 +4,7 @@ This register starts at the pinned Meeting Transcriber baseline. “Preserve” 
 
 | Existing capability / source boundary | Sawti disposition | Gate and evidence needed |
 |---|---|---|
-| Dual app-audio and microphone capture (`AudioCaptureSession`, `DualSourceRecorder`, `RecordingProvider`) | Preserve low-level mechanisms; move capture ownership into the architecture-selected independent helper processes | P0.4 feasibility, then G2 route/fault/capture-completeness evidence |
+| Dual app-audio and microphone capture (`AudioCaptureSession`, `DualSourceRecorder`, `RecordingProvider`) | Preserve low-level mechanisms; begin helper extraction with an in-bundle command-line helper signed under the host's code-signing identifier; request TCC access from the host UI | Minimal mic-only helper/TCC/IPC feasibility passed in P0.4; G2 must still qualify app-audio capture, real meeting routes, faults and completeness |
 | Microphone-only and manual app capture (`MicCaptureHandler`, `AppTapSession`, `AppPickerView`) | Preserve; make mic-only first-class and retain manual picker as fallback | Alpha short-session proof; G2 on actual required devices |
 | Native Teams/Zoom and Chromium/WebRTC meeting detection | Preserve implementations and consent; auto-monitoring remains off until explicit opt-in and safe lifecycle are qualified | G2 detector/consent matrix; P7 route-specific claims |
 | Optional app-activity microphone monitoring | Preserve code and controls; do not silently remove applications | Validate each enabled detector and permission; no new detector work on core path |
@@ -21,7 +21,7 @@ This register starts at the pinned Meeting Transcriber baseline. “Preserve” 
 
 ## Baseline defects and unresolved limits
 
-- Current capture is in-process. Synchronous Core Audio/AVAudioEngine work can block; the process helper boundary remains unproven on this machine.
+- Product capture is still in-process. A throwaway command-line helper passed mic-only launch, host-granted TCC, pipe control, WAV persistence and forced teardown when signed with the host's code-signing identifier. A helper with a distinct app bundle ID did not complete the permission flow in the bounded probe; production integration and app-audio capture remain unverified.
 - Issue #778 reports first mic start hanging; issue #790 reports tests writing real application data. Both are active implementation risks.
 - Capture callbacks currently have write paths whose return/error accounting requires hardening. Do not equate successful tap creation with delivered, persisted audio.
 - App-level process capture does not prove browser-tab isolation. No claim of capturing only a particular Meet tab is allowed.
