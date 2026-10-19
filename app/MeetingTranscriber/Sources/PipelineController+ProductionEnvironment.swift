@@ -42,9 +42,11 @@ extension PipelineController {
             let staging = q.stagingDir
             // The 30-second mtime guard protects a writer that may still be
             // active when recovery is triggered by a normal watch-start. After
-            // AppLauncher has positively identified the previous process as
-            // dead, those tracks cannot still be written by it, so an immediate
-            // relaunch can safely recover them without waiting for the guard.
+            // AppLauncher identifies the previous app process as dead, its
+            // helper receives stdin EOF and is designed to stop/finalize. The
+            // cold-launch path bypasses the guard for prompt recovery, but a
+            // real force-kill capture must still validate that helper finalization
+            // completes before this scan on supported macOS versions.
             let minAge: TimeInterval = allowRecentFiles ? 0 : 30
             await Task.detached(priority: .utility) {
                 let repaired = WavHeaderRepair.repairUnfinalized(in: staging, minAge: minAge)
