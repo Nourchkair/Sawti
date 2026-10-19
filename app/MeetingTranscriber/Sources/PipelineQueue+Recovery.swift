@@ -442,11 +442,10 @@ extension PipelineQueue {
         recordingsDir: URL = AppPaths.recordingsDir,
         maxAge: TimeInterval = 86400,
     ) async {
-        // One-time migration: seed processed list with existing recordings
-        // Only for the default recordings directory (not test overrides)
-        if recordingsDir == AppPaths.recordingsDir {
-            await processedLedger.migrate(recordingsDir: recordingsDir)
-        }
+        // One-time migration: seed the processed list before any caller can
+        // create a new recovered mix in this directory. Startup's staged
+        // recovery also performs this migration before repairing/re-mixing.
+        await processedLedger.migrate(recordingsDir: recordingsDir)
 
         // Both reads happen here, on the main actor, before the detached hop:
         // the registry is main-actor isolated, and reading it from inside the
