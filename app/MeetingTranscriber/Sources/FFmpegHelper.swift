@@ -10,7 +10,7 @@ enum FFmpegHelper {
     private static let searchPaths = [
         "/opt/homebrew/bin",
         "/usr/local/bin",
-        "\(NSHomeDirectory())/.local/bin",
+        AppPaths.homeDirectory.appending(path: ".local/bin").path,
         "/usr/bin",
     ]
 

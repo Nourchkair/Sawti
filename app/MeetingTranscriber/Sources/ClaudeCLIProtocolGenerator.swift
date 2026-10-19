@@ -28,9 +28,9 @@
 
         /// Search paths for Claude CLI binaries.
         static let searchPaths = [
-            "\(NSHomeDirectory())/.local/bin",
+            AppPaths.homeDirectory.appending(path: ".local/bin").path,
             "/usr/local/bin",
-            "\(NSHomeDirectory())/.npm-global/bin",
+            AppPaths.homeDirectory.appending(path: ".npm-global/bin").path,
             "/opt/homebrew/bin",
         ]
 

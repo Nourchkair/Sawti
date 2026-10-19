@@ -111,8 +111,8 @@
             XCTAssertEqual(paths.count, 4)
             XCTAssertTrue(paths.contains("/usr/local/bin"))
             XCTAssertTrue(paths.contains("/opt/homebrew/bin"))
-            XCTAssertTrue(paths.contains("\(NSHomeDirectory())/.local/bin"))
-            XCTAssertTrue(paths.contains("\(NSHomeDirectory())/.npm-global/bin"))
+            XCTAssertTrue(paths.contains(AppPaths.homeDirectory.appending(path: ".local/bin").path))
+            XCTAssertTrue(paths.contains(AppPaths.homeDirectory.appending(path: ".npm-global/bin").path))
         }
 
         // MARK: - buildSubprocessArgs
