@@ -8,10 +8,11 @@ This is the initial implementation evidence ledger. It records observations and 
 |---|---|---|
 | Apple Silicon M2 / 8 GB | Yes: MacBook Air, `Mac14,2`, Apple M2, 8 GB | Accepted by user as the development target; MacBook Pro qualification is separate if included in release support claims |
 | macOS 14.2+ | macOS 26.6.2 | API floor is satisfied on this host; oldest advertised OS remains unqualified |
-| Xcode build tools | `xcode-select` points to `/Library/Developer/CommandLineTools`; `xcodebuild -version` reports that Xcode is required | **Blocked**: no full Xcode installation is selected; package/project build and signed-app validation are unavailable |
-| macOS SDK | 15.2 from Command Line Tools | Available, but not sufficient to resolve the Swift compiler mismatch |
-| Swift tools 6.2 | Selected Swift is 6.0.3 from Command Line Tools | **Blocked**: do not lower package/toolchain requirements |
-| Stable local code-signing identity | `security find-identity` reports zero valid identities | **Blocked**: actual TCC permission persistence/helper signing cannot yet be evaluated |
+| Xcode build tools | `xcode-select` points to `/Applications/Xcode.app/Contents/Developer`; Xcode 27.1 (27A9275) | Selected; Xcode build tools are now available |
+| macOS SDK | 27.0 from the selected Xcode 27.1 installation | Available; actual app/package build remains untested |
+| Swift tools 6.2 | Apple Swift 6.4, target `arm64-apple-macosx26.0` | Toolchain requirement is satisfied; no repository build has been run |
+| Stable local code-signing identity | Dedicated `SawtiProbe.keychain-db` exists and contains the self-signed Sawti Probe Local Development certificate (SHA-256 `7F93BD3AF2E78FDF245DD8A8A77F788D53F3C232E4CA852D141AAD45C95812A5`), but `security find-identity -v -p codesigning` reports zero valid identities and a disposable `codesign` attempt returns `no identity found` | **Blocked**: certificate trust is not configured, so signed-helper/TCC feasibility cannot yet be evaluated |
+| Keychain and trust scope | Dedicated keychain is outside the user's current keychain search list; that list still contains only `login.keychain-db`. The newly generated keychain unlock secret is stored as one new generic-password item in the login keychain. `security dump-trust-settings` reports no trust settings | No user or system trust setting was added; user-scoped code-signing trust would require a separate approval before proceeding |
 | Safe isolated test environment | Not established | **Pending**: issue #790 identifies real-data test writes; first create P1 isolation guards before running inherited suites |
 | Actual app/mic audio capture through helpers | Not attempted | **Pending**: no helper code or permission prompt has run |
 | Processing sandbox/model access | Not attempted | **Pending**: validate with actual installed local model before Alpha |
@@ -20,12 +21,12 @@ This is the initial implementation evidence ledger. It records observations and 
 
 | Gate | Status | Evidence / next action |
 |---|---|---|
-| G0 baseline and identity | In progress | Baseline pinned and source/issue registers added. Probe identity and isolation still to implement after toolchain/signing prerequisites are addressed |
-| GA P0.4 helper/TCC feasibility | **Blocked before test** | Requires full Xcode or an otherwise validated Swift 6.2 build setup plus a stable local signing identity. No capture result is inferred from source review |
+| G0 baseline and identity | In progress | Baseline pinned and source/issue registers added. Xcode/Swift prerequisite is now satisfied; a dedicated self-signed certificate exists, but macOS does not yet recognize it as a valid code-signing identity |
+| GA P0.4 helper/TCC feasibility | **Blocked before test** | Toolchain is ready; signed-helper validation requires a code-signing trust decision for the dedicated certificate. No capture result is inferred from source review |
 | G1 isolated test infrastructure | Not started | Must prevent personal data access before inherited tests run |
 | Gα Sawti Alpha | Not started | Depends on GA/G0/G1 and early slices in the approved implementation plan |
 
-No app build, launch, unit/integration test, model load, microphone prompt, system-audio permission request, fixture recording or installed package has been performed against this checkout. The `xcodebuild` version probe failed because only Command Line Tools are selected; this is an environment check, not an app build attempt.
+No app build, launch, unit/integration test, model load, microphone prompt, system-audio permission request, fixture recording or installed package has been performed against this checkout. The Xcode/Swift version checks and disposable signing check are environment/identity probes, not repository app builds or capture tests. The signing check failed because macOS reported no valid identity; no trust settings were installed.
 
 ## Evidence rules
 
