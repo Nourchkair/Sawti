@@ -33,6 +33,19 @@ extension XCTestCase {
         }
         return url
     }
+
+    /// Give each test its own queue log directory. A default `PipelineQueue()`
+    /// uses the app-wide IPC directory and lets unrelated tests observe one
+    /// another's snapshots and ledger entries; this unique path keeps those
+    /// writes local to the test's disposable home.
+    @MainActor
+    func makeIsolatedPipelineQueue() -> PipelineQueue {
+        let logDir = AppPaths.ipcDir.appendingPathComponent(
+            "test-queue-\(UUID().uuidString)",
+            isDirectory: true,
+        )
+        return PipelineQueue(logDir: logDir)
+    }
 }
 
 // MARK: - Async Polling Helper

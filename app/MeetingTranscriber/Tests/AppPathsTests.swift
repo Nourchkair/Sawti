@@ -2,6 +2,26 @@
 import XCTest
 
 final class AppPathsTests: XCTestCase {
+    func testTestPathsStayBeneathDisposableHome() {
+        XCTAssertTrue(AppPaths.isRunningTests)
+        XCTAssertTrue(
+            AppPaths.homeDirectory.path.hasPrefix(FileManager.default.temporaryDirectory.path),
+            "test paths must resolve below the system temporary directory",
+        )
+        XCTAssertTrue(AppPaths.dataDir.path.hasPrefix(AppPaths.homeDirectory.path))
+        XCTAssertTrue(AppPaths.downloadsProtocolsDir.path.hasPrefix(AppPaths.homeDirectory.path))
+    }
+
+    @MainActor
+    func testIsolatedQueueHelperUsesDistinctIpcSubdirectories() {
+        let first = makeIsolatedPipelineQueue()
+        let second = makeIsolatedPipelineQueue()
+
+        XCTAssertNotEqual(first.logDir, second.logDir)
+        XCTAssertTrue(first.logDir.path.hasPrefix(AppPaths.ipcDir.path))
+        XCTAssertTrue(second.logDir.path.hasPrefix(AppPaths.ipcDir.path))
+    }
+
     // MARK: - dataDir
 
     func testDataDirUsesApplicationSupport() {

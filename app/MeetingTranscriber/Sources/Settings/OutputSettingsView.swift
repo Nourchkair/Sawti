@@ -339,7 +339,7 @@ struct OutputSettingsView: View {
     private var outputDirDisplay: String {
         OutputSettingsLogic.displayPath(
             for: settings.effectiveOutputDir,
-            home: FileManager.default.homeDirectoryForCurrentUser,
+            home: AppPaths.homeDirectory,
         )
     }
 

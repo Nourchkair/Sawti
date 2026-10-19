@@ -27,7 +27,7 @@ import XCTest
 /// break" unanswerable from it. Unexplained, and not what this gate fixes; it
 /// only keeps it out of runs that were asking about something else. Run it
 /// deliberately:
-///   RUN_SPEAKER_BACKTEST=1 swift test --filter SpeakerMatcherRealRecordingBacktest
+///   RUN_SPEAKER_BACKTEST=1 ./scripts/test-isolated.sh --filter SpeakerMatcherRealRecordingBacktest
 ///   (use `MAX_BACKTEST_RECORDINGS=5` to cap the run for a quicker iteration)
 final class SpeakerMatcherRealRecordingBacktest: XCTestCase {
     private struct Config {
@@ -37,6 +37,8 @@ final class SpeakerMatcherRealRecordingBacktest: XCTestCase {
     }
 
     private func loadConfigOrSkip() throws -> Config {
+        // This deliberately opted-in backtest is the only test allowed to
+        // inspect real recordings; the ordinary suite uses the disposable home.
         let home = FileManager.default.homeDirectoryForCurrentUser
         let recordings = home.appending(path: "Downloads/MeetingTranscriber/recordings")
         let speakersDB = home.appending(path:

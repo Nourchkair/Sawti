@@ -250,7 +250,7 @@ struct GeneralSettingsView: View {
     private var recordOnlyBanner: some View {
         let display = OutputSettingsLogic.displayPath(
             for: settings.effectiveOutputDir.appendingPathComponent("recordings"),
-            home: FileManager.default.homeDirectoryForCurrentUser,
+            home: AppPaths.homeDirectory,
         )
         return Label {
             VStack(alignment: .leading, spacing: 4) {

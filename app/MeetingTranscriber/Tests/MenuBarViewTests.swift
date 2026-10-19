@@ -43,7 +43,7 @@ final class MenuBarViewTests: XCTestCase {
         MenuBarView(
             status: status,
             isWatching: isWatching,
-            pipelineQueue: pipelineQueue ?? PipelineQueue(),
+            pipelineQueue: pipelineQueue ?? makeIsolatedPipelineQueue(),
             updateChecker: updateChecker,
             onStartStop: {},
             onRecordApp: {},
@@ -229,7 +229,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .idle),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: { called = true },
             onRecordApp: {},
@@ -256,7 +256,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .idle),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: {},
@@ -283,7 +283,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .idle),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: {},
@@ -310,7 +310,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .idle),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: {},
@@ -337,7 +337,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .protocolReady, protocolPath: "/tmp/p.md"),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: {},
@@ -364,7 +364,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .waitingForSpeakerNames),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: {},
@@ -412,7 +412,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testProcessingSectionShownWithActiveJob() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Standup",
             appName: "Teams",
@@ -451,7 +451,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testDismissButtonShownForCompletedJob() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Retro",
             appName: "Zoom",
@@ -492,7 +492,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: {},
@@ -515,7 +515,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testDismissButtonCallsCallbackWithJobID() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Standup",
             appName: "Teams",
@@ -554,7 +554,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testDismissButtonShownForErrorJob() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Sprint",
             appName: "Webex",
@@ -639,7 +639,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testWarningJobShowsWarningText() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Standup",
             appName: "Teams",
@@ -696,7 +696,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .idle),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: { called = true },
@@ -738,7 +738,7 @@ final class MenuBarViewTests: XCTestCase {
         let sut = MenuBarView(
             status: makeStatus(state: .recording),
             isWatching: false,
-            pipelineQueue: PipelineQueue(),
+            pipelineQueue: makeIsolatedPipelineQueue(),
             updateChecker: nil,
             onStartStop: {},
             onRecordApp: {},
@@ -802,7 +802,7 @@ final class MenuBarViewTests: XCTestCase {
     // MARK: - Error job display
 
     func testErrorJobShowsErrorMessage() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Broken",
             appName: "Teams",
@@ -856,7 +856,7 @@ final class MenuBarViewTests: XCTestCase {
     // MARK: - Job state labels
 
     func testWaitingJobShowsWaitingLabel() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Standup",
             appName: "Teams",
@@ -871,7 +871,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testCancelButtonShownForWaitingJob() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Sprint",
             appName: "Zoom",
@@ -886,7 +886,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testCancelButtonHiddenForDoneJob() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Sprint",
             appName: "Zoom",
@@ -902,7 +902,7 @@ final class MenuBarViewTests: XCTestCase {
     }
 
     func testDoneJobWithoutPathsHidesOpenButton() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job = PipelineJob(
             meetingTitle: "Sprint",
             appName: "Zoom",
@@ -937,7 +937,7 @@ final class MenuBarViewTests: XCTestCase {
     // MARK: - Multiple jobs
 
     func testMultipleJobsRendered() throws {
-        let queue = PipelineQueue()
+        let queue = makeIsolatedPipelineQueue()
         let job1 = PipelineJob(
             meetingTitle: "Meeting 1",
             appName: "Teams",
