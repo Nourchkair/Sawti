@@ -38,7 +38,7 @@ Observed with system metadata on 2026-10-18:
 - Compiler: Apple Swift 6.0.3
 - Valid code-signing identities: zero
 
-This machine is an M2/8 GB development host, but it is a MacBook Air rather than the MacBook Pro named in Sawti's qualification requirement. It can support source work and a provisional feasibility probe after the toolchain/signing prerequisites are resolved. It cannot alone certify the intended MacBook Pro's thermal or device-specific behavior. Do not claim the signed-helper/TCC feasibility gate has passed until a stable local signing identity and a Swift 6.2-capable build environment are available and actual audio reaches saved probe files.
+The user accepted this MacBook Air M2/8 GB as Sawti's development target. It can support the early feasibility probe and milestone validation after the toolchain/signing prerequisites are resolved. Its results do not establish thermal or device-specific behavior for a MacBook Pro; separately qualify that model only if Sawti's release support claims include it. Do not claim the signed-helper/TCC feasibility gate has passed until a stable local signing identity and a Swift 6.2-capable build environment are available and actual audio reaches saved probe files.
 
 ## License and release findings to carry forward
 
@@ -57,4 +57,4 @@ This machine is an M2/8 GB development host, but it is a MacBook Air rather than
 | SPM lock pins | WhisperKit 1.1.0; FluidAudio 0.17.4; exact revisions recorded in the lockfile |
 | Repository tests/build | Not run; Swift 6.2 requirement is unmet and issue #790 marks unsafe real-user test writes |
 | Helper/TCC signing | Not run; zero valid identities and no Swift 6.2 toolchain |
-| Exact target model | Not present on this host; current host is M2 MacBook Air, not the stated Pro |
+| Exact target model | Current M2 MacBook Air accepted as development target; MacBook Pro qualification is separate if included in release support claims |
