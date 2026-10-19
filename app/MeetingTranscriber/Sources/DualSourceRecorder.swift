@@ -332,15 +332,15 @@ class DualSourceRecorder: RecordingProvider {
 
     /// Scan `dir` for crashed recordings (see `crashedRecordingStems`) and
     /// re-mix each. Returns the count recovered; ones that can't be re-mixed
-    /// (e.g. a 0-byte temp) are left for `cleanupTempFiles`. Runs from the
-    /// launch queue-build (the first watch-start / enqueue), before
-    /// `recoverOrphanedRecordings` enqueues the recovered `_mix.wav`.
+    /// (e.g. a 0-byte temp) are left for `cleanupTempFiles`. Runs during queue
+    /// construction on an unclean cold launch and before the first watch-start
+    /// or enqueue, before `recoverOrphanedRecordings` enqueues the recovered mix.
     ///
     /// `minAge` skips a `.tmp` still being written by an in-progress recording
     /// (its mtime is recent; a crashed recording's temp predates the relaunch
-    /// gap). The queue-build Task that calls this is fired by a watch-start
-    /// immediately before the loop may begin a new recording, so the guard is
-    /// load-bearing — not cosmetic.
+    /// gap). Normal queue builds use the age guard before a watch-start or
+    /// enqueue; only the cold-launch path may bypass it after the previous
+    /// process has been proven dead. The guard remains load-bearing — not cosmetic.
     @discardableResult
     nonisolated static func recoverCrashedRecordings(
         in dir: URL,

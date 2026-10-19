@@ -50,6 +50,7 @@ final class PipelineControllerOutputFolderTests: XCTestCase {
         private var stopLog: [URL] = []
         var resolved: [URL] = []
         var recoveries = 0
+        var recoveryPolicies: [Bool] = []
 
         var starts: [URL] {
             lock.withLock { startLog }
@@ -85,7 +86,10 @@ final class PipelineControllerOutputFolderTests: XCTestCase {
                 logDir: logDir,
                 stagingDir: staging,
                 securityScope: recorder.access,
-                recoverStagedRecordings: { _ in recorder.recoveries += 1 },
+                recoverStagedRecordings: { _, allowRecentFiles in
+                    recorder.recoveries += 1
+                    recorder.recoveryPolicies.append(allowRecentFiles)
+                },
                 resolveOutputDir: { resolver in
                     let url = resolver.resolve()
                     recorder.resolved.append(url)
@@ -129,6 +133,18 @@ final class PipelineControllerOutputFolderTests: XCTestCase {
     }
 
     // MARK: - The scope is opened on what the resolver returned
+
+    /// An unclean process exit proves the prior writer is gone, so recovery can
+    /// skip the normal mtime wait and surface the partial recording immediately.
+    func testEnsureQueueCarriesColdLaunchRecoveryPermission() throws {
+        let recorder = Recorder()
+        let pc = try makeController(recorder)
+
+        pc.ensureQueue(allowRecentStagedRecordings: true)
+
+        XCTAssertEqual(recorder.recoveries, 1)
+        XCTAssertEqual(recorder.recoveryPolicies, [true])
+    }
 
     /// Through the production wiring: the queue opens its scope on the very URL
     /// object the resolver returned from the bookmark, not on one equal to it.

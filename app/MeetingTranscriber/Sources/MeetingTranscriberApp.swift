@@ -75,7 +75,11 @@ private struct WindowAccessor: NSViewRepresentable {
 // Not @main — AppLauncher owns the entry point so a selftest launch can
 // divert before this scene (and AppState with it) is ever constructed.
 struct MeetingTranscriberApp: App {
-    @State private var appState = AppState(notifier: NotificationManager.shared)
+    @NSApplicationDelegateAdaptor(SawtiApplicationDelegate.self) private var applicationDelegate
+    @State private var appState = AppState(
+        notifier: NotificationManager.shared,
+        previousExit: AppLauncher.previousExit,
+    )
     @State private var captionsWindow: LiveCaptionsWindowController?
     @Environment(\.openWindow)
     private var openWindow
@@ -418,6 +422,7 @@ struct MeetingTranscriberApp: App {
 
     private func quit() {
         appState.watching.watchLoop?.stop()
+        applicationDelegate.allowUserRequestedTermination()
         NSApplication.shared.terminate(nil)
     }
 

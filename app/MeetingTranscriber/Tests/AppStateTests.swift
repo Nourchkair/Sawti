@@ -74,6 +74,27 @@ final class AppStateTests: XCTestCase { // swiftlint:disable:this type_body_leng
         return (state, notifier)
     }
 
+    func testUncleanPreviousExitBuildsQueueAndAllowsImmediateStagedRecovery() {
+        var recoveryPermissions: [Bool] = []
+        let environment = PipelineController.QueueEnvironment(
+            logDir: testLogDir,
+            stagingDir: testLogDir.appendingPathComponent("staging", isDirectory: true),
+            recoverStagedRecordings: { _, allowRecentFiles in
+                recoveryPermissions.append(allowRecentFiles)
+            },
+        )
+
+        let state = AppState(
+            settings: settings,
+            notifier: SilentNotifier(),
+            pipelineEnvironment: environment,
+            previousExit: .unclean(lastAlive: Date().addingTimeInterval(-1)),
+        )
+
+        XCTAssertNotNil(state.pipeline.queue.engine, "an unclean launch must build the queue without waiting for user action")
+        XCTAssertEqual(recoveryPermissions, [true], "a dead previous process makes recent staged audio safe to recover")
+    }
+
     private func makeJob(title: String = "Sprint Review") -> PipelineJob {
         PipelineJob(
             meetingTitle: title,

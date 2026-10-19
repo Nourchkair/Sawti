@@ -186,6 +186,41 @@ final class DualSourceRecorderCrashRecoveryTests: XCTestCase {
         )
     }
 
+    /// A relaunch that has proved the prior process is dead may recover a
+    /// just-written mic track immediately. The normal 30-second guard remains
+    /// in place for scans that could race a live writer.
+    func testImmediateRelaunchRecoversFreshMicrophoneOnlyRecording() throws {
+        let dir = try makeTempDirectory(prefix: "crash_mic_only_immediate")
+        let stem = "20260311_171000"
+        let micWav = dir.appendingPathComponent(stem + "_mic.wav")
+        try AudioMixer.saveWAV(samples: [Float](repeating: 0.2, count: 16000), sampleRate: 16000, url: micWav)
+        let marker = DualSourceRecorder.inProgressMarker(stem: stem, in: dir)
+        try Data().write(to: marker)
+
+        let count = DualSourceRecorder.recoverCrashedRecordings(in: dir, minAge: 0)
+
+        XCTAssertEqual(count, 1, "a confirmed cold launch should not wait for the live-writer mtime window")
+        let mix = dir.appendingPathComponent(stem + "_mix.wav")
+        XCTAssertGreaterThan(try AudioMixer.loadAudioFileAsFloat32(url: mix).count, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    func testNormalRecoveryStillSkipsFreshMicrophoneOnlyRecording() throws {
+        let dir = try makeTempDirectory(prefix: "crash_mic_only_live_guard")
+        let stem = "20260311_172000"
+        let micWav = dir.appendingPathComponent(stem + "_mic.wav")
+        try AudioMixer.saveWAV(samples: [Float](repeating: 0.2, count: 16000), sampleRate: 16000, url: micWav)
+        let marker = DualSourceRecorder.inProgressMarker(stem: stem, in: dir)
+        try Data().write(to: marker)
+
+        let count = DualSourceRecorder.recoverCrashedRecordings(in: dir)
+
+        XCTAssertEqual(count, 0, "a normal in-session scan must preserve a track that may still be written")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: micWav.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(stem + "_mix.wav").path))
+    }
+
     /// A start that threw before capture opened leaves a marker and no tracks.
     /// Nothing else removes one: `stop()` never ran, and recovery fails on
     /// `noAudioData` every launch and every watch-start, warning each time.
