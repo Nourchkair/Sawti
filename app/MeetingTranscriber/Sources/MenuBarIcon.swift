@@ -86,6 +86,17 @@ enum MenuBarIcon {
     nonisolated private static let lineWidths: [CGFloat] = [0.70, 0.55, 0.65, 0.50, 0.40]
     nonisolated private static let lineLeftInset: CGFloat = 0.12 // multiplied by rect width
 
+    /// Canonical Sawti mark. The standalone app bundle carries this in
+    /// Contents/Resources; SwiftPM's resource bundle keeps unit tests and
+    /// `swift run` working without a hand-assembled .app.
+    private static let officialLogo: NSImage? = {
+        let url = Bundle.main.url(forResource: "SawtiLogo", withExtension: "png")
+            ?? Bundle.module.url(forResource: "SawtiLogo", withExtension: "png")
+        guard let url, let image = NSImage(contentsOf: url) else { return nil }
+        image.isTemplate = true
+        return image
+    }()
+
     /// Pure layout math used from the rendering closure (off-main during
     /// composition). `nonisolated` so the closure isn't forced onto MainActor.
     nonisolated static func barsLayout(in rect: NSRect) -> (left: CGFloat, centerY: CGFloat) {
@@ -215,6 +226,9 @@ enum MenuBarIcon {
     /// per-half tint pass can re-draw the same body under a clip rect.
     private static func drawBadgeBody(badge: BadgeKind, in rect: NSRect, frame: Int) {
         switch badge {
+        case .inactive:
+            drawSawtiLogo(in: rect)
+
         case .transcribing:
             drawTranscribingAnimation(in: rect, frame: frame)
 
@@ -234,6 +248,22 @@ enum MenuBarIcon {
         default:
             drawRecordingAnimation(in: rect, frame: frame)
         }
+    }
+
+    /// Idle uses the official logo as a template so macOS adapts it to the
+    /// current menu-bar appearance. If packaging is incomplete, keep the
+    /// previous static waveform visible rather than showing a blank item.
+    private static func drawSawtiLogo(in rect: NSRect) {
+        guard let officialLogo else {
+            drawRecordingAnimation(in: rect, frame: 0)
+            return
+        }
+        officialLogo.draw(
+            in: rect,
+            from: NSRect(origin: .zero, size: officialLogo.size),
+            operation: .sourceOver,
+            fraction: 1,
+        )
     }
 
     private enum Half { case top, bottom }

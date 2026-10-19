@@ -14,6 +14,17 @@ final class MenuBarIconTests: XCTestCase { // swiftlint:disable:this type_body_l
         XCTAssertEqual(image.size.height, 18, accuracy: 0.01)
     }
 
+    func testIdleUsesOfficialLogoAndRecordingKeepsAnimatedWaveform() {
+        let idle = MenuBarIcon.image(badge: .inactive)
+        let recordingFrame0 = MenuBarIcon.image(badge: .recording, animationFrame: 0)
+        let recordingFrame3 = MenuBarIcon.image(badge: .recording, animationFrame: 3)
+
+        XCTAssertNotEqual(idle.tiffRepresentation, recordingFrame0.tiffRepresentation)
+        XCTAssertNotEqual(recordingFrame0.tiffRepresentation, recordingFrame3.tiffRepresentation)
+        XCTAssertTrue(idle.isTemplate)
+        XCTAssertTrue(recordingFrame0.isTemplate)
+    }
+
     func testRecordOnlyOverlayProducesNonTemplateImageOverAnyBadge() {
         for badge in BadgeKind.allCases {
             let image = MenuBarIcon.image(badge: badge, recordOnlyOverlay: true)

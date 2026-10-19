@@ -126,6 +126,10 @@ if [ -d "$ICONSET_SRC" ]; then
     echo "  App icon: $RESOURCES/AppIcon.icns"
 fi
 
+# Runtime menu-bar mark. Keep the canonical transparent artwork in the app
+# bundle so idle rendering does not depend on the SwiftPM build tree.
+cp "$SPM_DIR/Sources/Resources/SawtiLogo.png" "$RESOURCES/SawtiLogo.png"
+
 # Licences for the third-party code and weights this bundle redistributes.
 # Installed before the model, and unconditionally, so no failure further down
 # can produce a bundle that ships the components without their notices.
