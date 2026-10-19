@@ -48,6 +48,11 @@ extension PipelineController {
             // real force-kill capture must still validate that helper finalization
             // completes before this scan on supported macOS versions.
             let minAge: TimeInterval = allowRecentFiles ? 0 : 30
+            // Seed the one-time legacy ledger before crash recovery creates a
+            // fresh `_mix.wav`. If migration runs afterward, it mistakes that
+            // newly recovered recording for a pre-existing file and marks it
+            // processed, so the following orphan scan silently skips its job.
+            await q.processedLedger.migrate(recordingsDir: staging)
             await Task.detached(priority: .utility) {
                 let repaired = WavHeaderRepair.repairUnfinalized(in: staging, minAge: minAge)
                 if repaired > 0 { logger.info("Repaired \(repaired) unfinalized recording(s) on launch") }
@@ -55,7 +60,7 @@ extension PipelineController {
                 if recovered > 0 { logger.info("Recovered \(recovered) crashed recording(s) on launch") }
                 DualSourceRecorder.cleanupTempFiles(recordingsDir: staging, minAge: minAge)
             }.value
-            await q.recoverOrphanedRecordings()
+            await q.recoverOrphanedRecordings(recordingsDir: staging)
         }
     }
 }

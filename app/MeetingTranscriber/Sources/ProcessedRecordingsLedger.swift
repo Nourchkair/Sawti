@@ -58,8 +58,11 @@ struct ProcessedRecordingsLedger {
         }
     }
 
-    /// One-time migration: if no processed_recordings.json exists yet, seed it with
-    /// all existing `_mix.wav` files so they don't get recovered on first launch after update.
+    /// One-time migration: if no processed_recordings.json exists yet, seed it
+    /// with all existing `_mix.wav` files so they don't get recovered on first
+    /// launch after update. An empty scan still writes `[]` to mark migration
+    /// complete; otherwise a mix created by crash recovery immediately after
+    /// the scan could be mistaken for a pre-existing, already-processed file.
     ///
     /// Dir scan + JSON encode + atomic write run on a detached task. The
     /// existence guard makes it a no-op (no detached task spawned) when the
@@ -77,7 +80,6 @@ struct ProcessedRecordingsLedger {
             for file in entries where file.lastPathComponent.hasSuffix(RecordingFileSuffix.mix) {
                 paths.insert(file.standardizedFileURL.path)
             }
-            guard !paths.isEmpty else { return }
             do {
                 let data = try JSONEncoder().encode(Array(paths))
                 try data.write(to: path, options: .atomic)

@@ -78,6 +78,25 @@ final class ProcessedRecordingsLedgerTests: XCTestCase {
         ]))
     }
 
+    func testEmptyMigrationPreventsLaterCrashMixFromBeingSeededAsProcessed() async throws {
+        let recDir = tmpDir.appendingPathComponent("empty_recordings")
+        try FileManager.default.createDirectory(at: recDir, withIntermediateDirectories: true)
+        let ledger = ProcessedRecordingsLedger(logDir: tmpDir)
+
+        await ledger.migrate(recordingsDir: recDir)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ledger.path.path))
+        XCTAssertTrue(ledger.load().isEmpty)
+
+        let recoveredMix = recDir.appendingPathComponent("20261019_120000_mix.wav")
+        try Data(repeating: 0xFF, count: 100).write(to: recoveredMix)
+        await ledger.migrate(recordingsDir: recDir)
+
+        XCTAssertFalse(
+            ledger.load().contains(recoveredMix.standardizedFileURL.path),
+            "a crash mix created after the first-launch migration must remain eligible for recovery",
+        )
+    }
+
     func testMigrateIsNoOpWhenFileAlreadyExists() async throws {
         let recDir = tmpDir.appendingPathComponent("recordings")
         try FileManager.default.createDirectory(at: recDir, withIntermediateDirectories: true)
