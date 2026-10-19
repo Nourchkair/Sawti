@@ -60,8 +60,8 @@ Single-source: Audio/Video → 16kHz mono (AVAudioFile → AVAsset → ffmpeg fa
 # Swift tests (parallel — ~1.4× faster than sequential). Use the isolation
 # wrapper locally: it gives app-owned file paths a disposable HOME and verifies
 # that the real user's Meeting Transcriber IPC directories stay unchanged.
-# macOS UserDefaults remains backed by cfprefsd; test suites must keep using
-# DefaultsSuite's existing delayed-cleanup manifest for their named domains.
+# Named test UserDefaults domains and KeychainHelper calls use process-local
+# memory; use DefaultsSuite for settings tests and never `.standard`.
 # Never pipe a test run into `tail`/`head`/`grep` to shorten it: the shell reports
 # the *last* command's status, so `swift test | tail -60` exits 0 on a red suite and
 # the truncation hides which test failed. Redirect to a file and read that instead
