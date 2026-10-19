@@ -5,7 +5,7 @@ This register starts at the pinned Meeting Transcriber baseline. “Preserve” 
 | Existing capability / source boundary | Sawti disposition | Gate and evidence needed |
 |---|---|---|
 | Dual app-audio and microphone capture (`AudioCaptureSession`, `DualSourceRecorder`, `RecordingProvider`) | Preserve low-level mechanisms; mic-only sessions now use the in-bundle command-line helper signed under the shared Sawti host identity | Minimal mic-only helper/TCC/IPC feasibility passed in P0.4; Sawti bundle capture and app-audio meeting routes remain unverified and require Beta validation |
-| Microphone-only and manual app capture (`MicCaptureHandler`, `AppTapSession`, `AppPickerView`) | Mic-only helper routing is implemented; retain the manual app picker and existing host capture fallback | Automated route tests pass; live Sawti permission, audio completeness and spoken-marker checks remain required for Alpha; Beta still requires meeting-app capture validation |
+| Microphone-only and manual app capture (`MicCaptureHandler`, `AppTapSession`, `AppPickerView`) | Mic-only helper routing is implemented; retain the manual app picker and existing host capture fallback | Alpha's signed-bundle microphone, spoken-marker, 10-minute ASR and force-quit recovery checks passed on the M2/8 GB development host; clean-install TCC continuity and app-audio meeting capture remain open for Beta/release qualification |
 | Native Teams/Zoom and Chromium/WebRTC meeting detection | Preserve implementations and consent; auto-monitoring remains off until explicit opt-in and safe lifecycle are qualified | G2 detector/consent matrix; P7 route-specific claims |
 | Optional app-activity microphone monitoring | Preserve code and controls; do not silently remove applications | Validate each enabled detector and permission; no new detector work on core path |
 | Imported audio/video and paired-track formats | Preserve decoder/import paths; copy original bytes before any derived processing | G3 coverage plus G4 copy-only ownership/error tests |
@@ -21,7 +21,7 @@ This register starts at the pinned Meeting Transcriber baseline. “Preserve” 
 
 ## Baseline defects and unresolved limits
 
-- Product capture is still in-process. A throwaway command-line helper passed mic-only launch, host-granted TCC, pipe control, WAV persistence and forced teardown when signed with the host's code-signing identifier. A helper with a distinct app bundle ID did not complete the permission flow in the bounded probe; production integration and app-audio capture remain unverified.
+- Microphone-only capture now uses the in-bundle helper and has passed a real signed-app force-quit recovery check. App-audio and dual-source capture remain separate paths; meeting-app behavior and clean-install TCC persistence are not yet qualified. The disposable helper probe showed that a helper with a distinct app bundle ID did not complete the permission flow in the bounded test, so preserve the shared host signing identity unless a new feasibility test passes.
 - Issue #778 reports first mic start hanging; issue #790 reports tests writing real application data. Both are active implementation risks.
 - Capture callbacks currently have write paths whose return/error accounting requires hardening. Do not equate successful tap creation with delivered, persisted audio.
 - App-level process capture does not prove browser-tab isolation. No claim of capturing only a particular Meet tab is allowed.

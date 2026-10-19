@@ -6,11 +6,11 @@ Sawti is an independent macOS transcription application derived from [Meeting Tr
 
 The current code provides a microphone-only recording route through an in-bundle helper process, on-device transcription through the existing WhisperKit and Parakeet engines, a full transcript viewer, and plain-text export. The engine's original segment text is saved separately before normalization or speaker labeling; the final transcript remains a separate artifact. Transcript and audio files are written with owner-only file permissions.
 
-The helper feasibility probe passed for a disposable app, but Sawti's packaged app has not yet passed live microphone permission, real recording, or spoken-word transcription validation. Treat this checkout as an internal prototype, not a release-ready recorder.
+The signed development app has now passed authorized microphone capture, a spoken-marker check (all nine phrases recognized), a 10:12 microphone session with local ASR, and a real force-quit recovery through saved transcript output. The recovered 49-second recording also completed local transcription and diarization after recovery. This completes Sawti's internal Alpha functional milestone; it does not make this checkout release-ready.
 
 ## Local processing and network use
 
-Recording and inference use local macOS audio capture and local models; Sawti does not require a paid transcription API or subscription. The selected model may need to be fetched on first use. Offline inference is only possible after the required model files are present locally and still needs a Sawti-specific validation run. Optional protocol providers remain available, but the default provider is disabled so transcripts are not sent to a summarization service by the core workflow.
+Recording and inference use local macOS audio capture and local models; Sawti does not require a paid transcription API or subscription. The selected model may need to be fetched on first use. The user accepted the offline Wi-Fi check for project sequencing; model inference also completed from the local cache. Optional protocol providers remain available, but the default provider is disabled so transcripts are not sent to a summarization service by the core workflow.
 
 ## Build
 
@@ -40,10 +40,10 @@ Sawti does not import or migrate data from an installed Meeting Transcriber app.
 
 ## Current limitations
 
-- The in-person microphone flow is implemented but needs a live Sawti-bundle/TCC and spoken-marker test before it can be considered reliable.
+- The microphone Alpha flow passed on the signed Sawti development app, including spoken-marker transcription, a 10-minute session, and force-quit recovery. Clean-install TCC persistence and rebuild continuity still need qualification.
 - Google Meet, Zoom, and Teams audio capture have not passed Sawti's Beta validation. Existing upstream app-audio mechanisms remain in the codebase; the Alpha helper route is microphone-only.
-- The disposable helper used for feasibility is not a substitute for testing the final package signature, clean-install permission prompt, or macOS permission persistence after rebuilds.
-- Runtime memory, thermal behavior, long-session completeness, transcript accuracy, and offline operation on an M2 Mac with 8 GB RAM remain unmeasured.
+- The development signing identity is self-signed and is not suitable for distribution or notarization. Clean-install permission prompts, TCC persistence after rebuilds, and release signing remain unverified.
+- WhisperKit model initialization took 185.36 seconds and 180.55 seconds on two recent launches on the MacBook Air M2/8 GB host, with high Neural Engine compiler activity. Transcription succeeded after loading, but this startup delay is a measured usability risk. Peak memory, thermal behavior, long-session word accuracy, and MacBook Pro-specific behavior remain unqualified. The 10-minute transcript had no ground-truth script; the spoken-marker check is a limited accuracy sample.
 - AcademiaOS integration is deferred until Sawti is dependable as an independent application.
 
 See [`docs/validation/VALIDATION.md`](docs/validation/VALIDATION.md) for evidence and pending checks, and [`docs/CAPABILITY_REGISTER.md`](docs/CAPABILITY_REGISTER.md) for the disposition of inherited features. The repository retains the upstream MIT license and notices.
