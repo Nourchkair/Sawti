@@ -65,6 +65,8 @@ fi
 
 # Assemble .app bundle
 mkdir -p "$APP_MACOS"
+mkdir -p "$APP_BUNDLE/Contents/Resources"
+cp "$SPM_DIR/Sources/Resources/SawtiLogo.png" "$APP_BUNDLE/Contents/Resources/SawtiLogo.png"
 # Use the dev bundle identifier to keep permissions separate from release.
 cp "$INFO_PLIST" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $DEV_BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
