@@ -37,7 +37,7 @@ MEETINGTRANSCRIBER_DEBUG_RPC=1 ./scripts/run_app.sh
 ```
 
 The app writes a 64-hex bearer token to
-`~/Library/Application Support/MeetingTranscriber/.rpc-token` (chmod 0600).
+`~/Library/Application Support/Sawti/.rpc-token` (chmod 0600).
 `mt-cli` reads it automatically — no config needed on your side.
 
 ## Endpoints

@@ -38,6 +38,7 @@ SAMPLE_EVERY_MIN=5
 # what a real leak reaches, so it fires on a runaway without inventing a budget.
 MAX_GROWTH_MB_PER_HOUR=500
 NO_BUILD=false
+NO_MIC=false             # keep the long process-tap soak from opening microphone capture
 SIMULATOR_FIXTURE=""
 APP_AFTER=quit
 
@@ -48,6 +49,7 @@ while [ $# -gt 0 ]; do
         --max-growth)     MAX_GROWTH_MB_PER_HOUR="$2"; shift ;;
         --fixture)        SIMULATOR_FIXTURE="$2"; shift ;;
         --no-build)       NO_BUILD=true ;;
+        --no-mic)         NO_MIC=true ;;
         --leave-app)      APP_AFTER=leave ;;
         -h|--help)
             cat <<'USAGE'
@@ -59,6 +61,7 @@ Usage: ./scripts/e2e-soak.sh [options]
                      (default 500). Everything is logged regardless.
   --fixture PATH     Audio fixture for meeting-simulator.
   --no-build         Use ~/Applications/MeetingTranscriber-Dev.app as-is.
+  --no-mic           Disable microphone capture for this run and restore the prior setting on exit.
   --leave-app        Leave the app running afterwards (debugging).
 USAGE
             exit 0 ;;
@@ -71,15 +74,16 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT/scripts/lib/sawti-paths.sh"
 DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
 SIMULATOR_PKG="$ROOT/tools/meeting-simulator"
 SIMULATOR_BIN="$SIMULATOR_PKG/.build/release/meeting-simulator"
 DEFAULT_FIXTURE="$ROOT/app/MeetingTranscriber/Tests/Fixtures/two_speakers_de.wav"
-RPC_TOKEN_FILE="$HOME/Library/Application Support/MeetingTranscriber/.rpc-token"
+RPC_TOKEN_FILE="$SAWTI_RPC_TOKEN_FILE"
 # Record-only writes to `<effectiveOutputDir>/recordings`, which defaults to
 # Downloads — NOT the Application Support path that only appears as a default
 # initializer argument. e2e-app.sh asserts against this same directory.
-REC_DIR="$HOME/Downloads/MeetingTranscriber/recordings"
+REC_DIR="$SAWTI_OUTPUT_RECORDINGS_DIR"
 RPC_BASE="http://127.0.0.1:9876"
 # shellcheck source=lib/bundle-ids.sh
 source "$ROOT/scripts/lib/bundle-ids.sh"
@@ -87,7 +91,7 @@ BUNDLE_ID="$DEV_BUNDLE_ID"
 
 [ -n "$SIMULATOR_FIXTURE" ] || SIMULATOR_FIXTURE="$DEFAULT_FIXTURE"
 
-RPC_READY_TIMEOUT_S=30
+RPC_READY_TIMEOUT_S="${SAWTI_RPC_READY_TIMEOUT_S:-90}"
 SETTLE_TIMEOUT_S=${SOAK_SETTLE_S:-120}
 RECORDING_DEADLINE_S=60
 # Starting to record allocates buffers in one step: measured 71 -> 103 MB within
@@ -193,9 +197,12 @@ case "$SAMPLE_EVERY_MIN" in ''|*[!0-9]*) fail "--sample-every must be a positive
 # nothing at all without any error. See write_dev_default in
 # scripts/lib/e2e-helpers.sh.
 _STANDARD_PLIST="$(dev_standard_plist "$BUNDLE_ID")"
+_CONTAINER_PLIST="$(dev_container_plist "$BUNDLE_ID")"
 SAVED_DEBUG_RPC=$(snapshot_default "$_STANDARD_PLIST" debugRPCEnabled)
 SAVED_AUTO_WATCH=$(snapshot_default "$_STANDARD_PLIST" autoWatch)
 SAVED_RECORD_ONLY=$(snapshot_default "$_STANDARD_PLIST" recordOnly)
+SAVED_NO_MIC=$(snapshot_default "$_STANDARD_PLIST" noMic)
+SAVED_NO_MIC_CONTAINER=$(snapshot_default "$_CONTAINER_PLIST" noMic)
 
 RUN_START_MARKER="$(mktemp "${TMPDIR:-/tmp}/e2e-soak-start.XXXXXX")"
 SIM_PID=""
@@ -205,6 +212,8 @@ on_exit() {
     restore_bool_default "$_STANDARD_PLIST" debugRPCEnabled "$SAVED_DEBUG_RPC"
     restore_bool_default "$_STANDARD_PLIST" autoWatch       "$SAVED_AUTO_WATCH"
     restore_bool_default "$_STANDARD_PLIST" recordOnly      "$SAVED_RECORD_ONLY"
+    restore_bool_default "$_STANDARD_PLIST" noMic           "$SAVED_NO_MIC"
+    restore_bool_default "$_CONTAINER_PLIST" noMic           "$SAVED_NO_MIC_CONTAINER"
     if [ "$APP_AFTER" = quit ]; then
         quit_running_app || true
         sweep_run_artifacts "$REC_DIR" "$RUN_START_MARKER"
@@ -222,7 +231,7 @@ if [ "$NO_BUILD" = false ]; then
 fi
 [ -d "$DEV_BUNDLE_DEPLOY" ] || fail "no dev bundle at $DEV_BUNDLE_DEPLOY"
 
-if [ ! -x "$SIMULATOR_BIN" ]; then
+if [ ! -x "$SIMULATOR_BIN" ] || [ "$SIMULATOR_PKG/Sources/main.swift" -nt "$SIMULATOR_BIN" ]; then
     log "Building meeting-simulator"
     (cd "$SIMULATOR_PKG" && swift build -c release >/dev/null) \
         || fail "meeting-simulator build failed"
@@ -234,18 +243,34 @@ fi
 write_dev_default "$BUNDLE_ID" debugRPCEnabled true bool
 write_dev_default "$BUNDLE_ID" autoWatch true bool
 write_dev_default "$BUNDLE_ID" recordOnly true bool
+if [ "$NO_MIC" = true ]; then
+    write_dev_default "$BUNDLE_ID" noMic true bool
+fi
 
 mkdir -p "$REC_DIR"
 quit_running_app || true
 log "Launching $DEV_BUNDLE_DEPLOY"
-open "$DEV_BUNDLE_DEPLOY"
+sawti_open_app "$DEV_BUNDLE_DEPLOY"
 
-RPC_TOKEN="$(cat "$RPC_TOKEN_FILE" 2>/dev/null || true)"
-[ -n "$RPC_TOKEN" ] || fail "no RPC token at $RPC_TOKEN_FILE"
-
+log "Waiting up to ${RPC_READY_TIMEOUT_S}s for RPC /healthz"
 poll_until "$RPC_READY_TIMEOUT_S" 1 _rpc_ready \
     || fail "RPC /healthz did not respond within ${RPC_READY_TIMEOUT_S}s"
 log "RPC up"
+
+# A long soak must not silently run with a different capture mode than the one
+# requested. In particular, --no-mic is intended to keep this test from
+# recording the developer's surroundings; assert the running app's resolved
+# setting before the simulator can trigger a recording.
+SOAK_STATE="$(rpc /state)"
+jq -e '.settings.recording.recordOnly == true' <<<"$SOAK_STATE" >/dev/null 2>&1 \
+    || fail "the running app did not resolve recordOnly=true; refusing to start the soak"
+if [ "$NO_MIC" = true ]; then
+    jq -e '.settings.recording.noMic == true' <<<"$SOAK_STATE" >/dev/null 2>&1 \
+        || fail "--no-mic was requested but the running app did not resolve noMic=true; refusing to record"
+    log "app resolved recordOnly=true and noMic=true"
+else
+    log "app resolved recordOnly=true (microphone follows the saved setting)"
+fi
 
 # Launch-time work (model preload, snapshot load, orphan recovery) allocates;
 # letting it finish keeps it out of the growth curve, where it would read as a

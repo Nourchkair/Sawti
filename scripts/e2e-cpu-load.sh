@@ -70,13 +70,14 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT/scripts/lib/sawti-paths.sh"
 DEV_BUNDLE_BUILD="$ROOT/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app"
 DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
 SIMULATOR_PKG="$ROOT/tools/meeting-simulator"
 SIMULATOR_BIN="$SIMULATOR_PKG/.build/release/meeting-simulator"
 DEFAULT_FIXTURE="$ROOT/app/MeetingTranscriber/Tests/Fixtures/two_speakers_de.wav"
-RPC_TOKEN_FILE="$HOME/Library/Application Support/MeetingTranscriber/.rpc-token"
-REC_DIR="$HOME/Library/Application Support/MeetingTranscriber/recordings"
+RPC_TOKEN_FILE="$SAWTI_RPC_TOKEN_FILE"
+REC_DIR="$SAWTI_RECORDINGS_DIR"
 RPC_BASE="http://127.0.0.1:9876"
 # shellcheck source=lib/bundle-ids.sh
 source "$ROOT/scripts/lib/bundle-ids.sh"
@@ -86,7 +87,7 @@ BUNDLE_ID="$DEV_BUNDLE_ID"
 
 # --- timing budgets -------------------------------------------------------
 
-RPC_READY_TIMEOUT_S=30
+RPC_READY_TIMEOUT_S="${SAWTI_RPC_READY_TIMEOUT_S:-90}"
 # Launch-time work (model preload, snapshot load, orphan-recovery scan) must
 # finish before the idle window or it pollutes the idle numbers.
 SETTLE_TIMEOUT_S=120
@@ -183,7 +184,7 @@ quit_running_app
 # via $GITHUB_ACTIONS — never set in a developer's shell; removes ONLY the
 # regenerable queue snapshot (same pattern as e2e-app.sh).
 if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-    _ipc_dir="$HOME/Library/Application Support/MeetingTranscriber/ipc"
+    _ipc_dir="$SAWTI_APP_SUPPORT_DIR/ipc"
     rm -f "$_ipc_dir/pipeline_queue.json" "$_ipc_dir/pipeline_queue.tmp"
     log "CI: reset stale pipeline-queue snapshot"
 fi
@@ -222,7 +223,7 @@ else
         || fail "re-sign of the deployed bundle failed — see the message above"
 fi
 
-if [ ! -x "$SIMULATOR_BIN" ]; then
+if [ ! -x "$SIMULATOR_BIN" ] || [ "$SIMULATOR_PKG/Sources/main.swift" -nt "$SIMULATOR_BIN" ]; then
     log "Building meeting-simulator"
     (cd "$SIMULATOR_PKG" && swift build -c release)
 fi
@@ -249,7 +250,7 @@ _rpc_ready() {
 
 launch_app_and_wait() {
     log "Launching $DEV_BUNDLE_DEPLOY"
-    open "$DEV_BUNDLE_DEPLOY"
+    sawti_open_app "$DEV_BUNDLE_DEPLOY"
     log "Waiting up to ${RPC_READY_TIMEOUT_S}s for RPC /healthz"
     poll_until "$RPC_READY_TIMEOUT_S" 1 _rpc_ready \
         || fail "RPC /healthz did not respond within ${RPC_READY_TIMEOUT_S}s"

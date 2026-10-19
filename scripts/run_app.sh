@@ -19,6 +19,7 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TRANSCRIBER_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/lib/sawti-paths.sh"
 
 export TRANSCRIBER_ROOT
 
@@ -172,4 +173,4 @@ echo "  TRANSCRIBER_ROOT=$TRANSCRIBER_ROOT"
 # Launch via `open` so macOS LaunchServices properly registers the app
 # (required for notification permissions, etc.).
 # The app discovers the project root by walking up from the executable.
-open -W "$APP_BUNDLE"
+sawti_open_app "$APP_BUNDLE" -W
