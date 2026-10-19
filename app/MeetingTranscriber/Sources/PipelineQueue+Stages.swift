@@ -901,7 +901,16 @@ extension PipelineQueue {
         if let cachedSegments = transcription.cachedSegments {
             let segPath = recordingsDir.appendingPathComponent("\(ctx.slug)_segments.json")
             if let data = try? JSONEncoder().encode(cachedSegments) {
-                try? data.write(to: segPath, options: .atomic)
+                do {
+                    try data.write(to: segPath, options: .atomic)
+                    // Cached segments contain recognized speech and may live in a user-shared output folder.
+                    try FileManager.default.restrictToOwner(segPath)
+                } catch {
+                    logger.warning(
+                        "[\(ctx.shortID, privacy: .public)] Could not persist private transcript segments: \(error.localizedDescription, privacy: .private)",
+                    )
+                    try? FileManager.default.removeItem(at: segPath)
+                }
             }
         }
 

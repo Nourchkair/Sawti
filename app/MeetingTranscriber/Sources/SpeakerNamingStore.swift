@@ -12,7 +12,7 @@ private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "Speaker
 /// Sidecar layout under `<outputDir>/recordings/`:
 /// - `<slug>_naming.json`  — the `SpeakerNamingData` payload (owner-only)
 /// - `<slug>_16k.wav`, `<slug>_app_16k.wav`, `<slug>_mic_16k.wav` — audio for re-diarization
-/// - `<slug>_segments.json` — cached transcript segments for late re-assignment
+/// - `<slug>_segments.json` — owner-only cached transcript segments for late re-assignment
 struct SpeakerNamingStore {
     /// Protocol output directory; the `recordings/` subfolder holds the
     /// sidecars. `nil` disables all I/O (skeleton queues / tests without an
