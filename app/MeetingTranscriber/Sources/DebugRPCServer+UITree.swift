@@ -107,7 +107,7 @@
         /// displayed folder or URL can't leak the account name. Anchored on the
         /// path separator (`home + "/"`) so a longer sibling like
         /// `/Users/romantic` is never mangled; a bare home path collapses to `~`.
-        /// Pure so it is unit-testable; the adapter passes `NSHomeDirectory()`.
+        /// Pure so it is unit-testable; the adapter passes the app's home path.
         nonisolated static func redactUITreeString(_ value: String?, homeDirectory: String) -> String? {
             guard let value, !homeDirectory.isEmpty else { return value }
             let abbreviated = value.replacingOccurrences(of: homeDirectory + "/", with: "~/")
@@ -180,7 +180,7 @@
         }
 
         var uiTitle: String? {
-            DebugRPCServer.redactUITreeString(DebugRPCServer.axLabel(element), homeDirectory: NSHomeDirectory())
+            DebugRPCServer.redactUITreeString(DebugRPCServer.axLabel(element), homeDirectory: AppPaths.homeDirectory.path)
         }
 
         var uiFrame: CGRect {

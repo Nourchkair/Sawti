@@ -77,9 +77,11 @@ snapshot_real_user_paths > "$guard_dir/before.json"
 test_status=0
 (
     cd "$package_dir"
+    # Avoid running a user-selected ffmpeg executable from the host environment.
     HOME="$test_home" \
         CFFIXED_USER_HOME="$test_home" \
         SAWTI_TEST_HOME="$test_home" \
+        FFMPEG_BINARY="" \
         swift test --parallel "$@"
 ) || test_status=$?
 

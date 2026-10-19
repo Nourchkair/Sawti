@@ -19,11 +19,19 @@ cd meeting-transcriber
 ./scripts/run_app.sh
 ```
 
-Run the tests to verify everything works:
+Run the tests through Sawti's isolation wrapper. It gives app-owned paths a
+disposable home and checks that the real Meeting Transcriber IPC directories
+remain unchanged:
 
 ```bash
-cd app/MeetingTranscriber && swift test
+./scripts/test-isolated.sh
 ```
+
+The wrapper does not redirect macOS `cfprefsd`: named `UserDefaults` test
+suites still use the real `~/Library/Preferences` directory. Tests must use
+`DefaultsSuite` for scratch domains; its manifest removes only those generated
+suite files after the system preferences service has settled. The real app
+preference domain and personal recordings are not test fixtures.
 
 ## Development workflow
 
@@ -88,10 +96,11 @@ The project includes a [`CLAUDE.md`](CLAUDE.md) with full architecture context. 
 
 ### Tests
 
-All new features and bug fixes must include tests. Run the full test suite before submitting:
+All new features and bug fixes must include tests. Run the full test suite
+through the isolation wrapper before submitting:
 
 ```bash
-cd app/MeetingTranscriber && swift test
+./scripts/test-isolated.sh
 ```
 
 ## Submitting a PR
