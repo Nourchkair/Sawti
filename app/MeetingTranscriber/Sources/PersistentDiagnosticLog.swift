@@ -52,8 +52,13 @@ enum PersistentDiagnosticLog {
     /// `~/Library/Logs/MeetingTranscriber/` — Apple convention, picked up
     /// by Console.app's "Log Reports" tab and not auto-cleaned by macOS.
     static var logDirectory: URL {
-        let logs = FileManager.default
-            .urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        let library: URL
+        if AppPaths.isRunningTests {
+            library = AppPaths.homeDirectory.appendingPathComponent("Library", isDirectory: true)
+        } else {
+            library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        }
+        let logs = library
             .appendingPathComponent("Logs", isDirectory: true)
             .appendingPathComponent("MeetingTranscriber", isDirectory: true)
         try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)

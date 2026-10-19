@@ -57,18 +57,22 @@ Single-source: Audio/Video → 16kHz mono (AVAudioFile → AVAsset → ffmpeg fa
 # Run menu bar app
 ./scripts/run_app.sh
 
-# Swift tests (parallel — ~1.4× faster than sequential)
+# Swift tests (parallel — ~1.4× faster than sequential). Use the isolation
+# wrapper locally: it gives app-owned file paths a disposable HOME and verifies
+# that the real user's Meeting Transcriber IPC directories stay unchanged.
+# macOS UserDefaults remains backed by cfprefsd; test suites must keep using
+# DefaultsSuite's existing delayed-cleanup manifest for their named domains.
 # Never pipe a test run into `tail`/`head`/`grep` to shorten it: the shell reports
 # the *last* command's status, so `swift test | tail -60` exits 0 on a red suite and
 # the truncation hides which test failed. Redirect to a file and read that instead
-# (`swift test --parallel > /tmp/run.log 2>&1`), or enable `set -o pipefail`.
-cd app/MeetingTranscriber && swift test --parallel
+# (`./scripts/test-isolated.sh > /tmp/run.log 2>&1`), or enable `set -o pipefail`.
+./scripts/test-isolated.sh
 
 # Swift tests under sanitizers (slow — TSan ~7.5 min, ASan ~4.5 min on M-series)
 # CI runs these nightly via cron + on push to main; locally use ad-hoc
 # before pushing concurrency-heavy or C-bridging changes.
-cd app/MeetingTranscriber && swift test --parallel --sanitize=thread --skip MenuBarIconSnapshotTests
-cd app/MeetingTranscriber && swift test --parallel --sanitize=address --skip MenuBarIconSnapshotTests
+./scripts/test-isolated.sh --sanitize=thread --skip MenuBarIconSnapshotTests
+./scripts/test-isolated.sh --sanitize=address --skip MenuBarIconSnapshotTests
 
 # Trigger sanitizer matrix on a specific PR/branch via CI
 gh workflow run quality-and-safety.yml -f run-sanitizer=true -f run-quality=false

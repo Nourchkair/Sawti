@@ -62,7 +62,7 @@ final class OutputDirectoryResolver {
         guard bookmark != reportedUnavailableBookmark else { return }
         reportedUnavailableBookmark = bookmark
 
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = AppPaths.homeDirectory
         let chosen = configuredPath.map { path in
             OutputSettingsLogic.displayPath(for: URL(fileURLWithPath: path), home: home)
         } ?? "The chosen output folder"

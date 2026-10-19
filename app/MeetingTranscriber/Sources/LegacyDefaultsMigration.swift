@@ -65,7 +65,7 @@ enum LegacyDefaultsMigration {
     /// container — the normal case, and indistinguishable here from a container
     /// we cannot read (the sandboxed build): both mean "nothing to merge".
     static func containerDefaults(for bundleID: String) -> [String: Any] {
-        let url = FileManager.default.homeDirectoryForCurrentUser
+        let url = AppPaths.homeDirectory
             .appendingPathComponent("Library/Containers/\(bundleID)")
             .appendingPathComponent("Data/Library/Preferences/\(bundleID).plist")
         guard let data = try? Data(contentsOf: url),

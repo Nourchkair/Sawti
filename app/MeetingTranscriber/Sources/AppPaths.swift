@@ -6,17 +6,70 @@ enum AppPaths {
     /// Logger subsystem for all os.log loggers.
     static let logSubsystem = "com.meetingtranscriber"
 
+    /// XCTest workers use a disposable home when one is supplied by
+    /// `scripts/test-isolated.sh`. The explicit environment seam keeps normal
+    /// app launches on the user's real home, while making every app-owned path
+    /// in the test process resolve beneath the disposable test home.
+    static let isRunningTests: Bool = {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["SAWTI_TEST_HOME"] != nil
+            || environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.processName.hasSuffix(".xctest")
+    }()
+
+    static let homeDirectory: URL = {
+        let environment = ProcessInfo.processInfo.environment
+        guard isRunningTests else { return FileManager.default.homeDirectoryForCurrentUser }
+
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .resolvingSymlinksInPath().standardizedFileURL
+        let candidate: URL
+        if let configuredHome = environment["SAWTI_TEST_HOME"] {
+            candidate = URL(fileURLWithPath: configuredHome, isDirectory: true)
+                .resolvingSymlinksInPath().standardizedFileURL
+            let allowedPrefix = temporaryDirectory.path.hasSuffix("/")
+                ? temporaryDirectory.path
+                : temporaryDirectory.path + "/"
+            guard candidate.path.hasPrefix(allowedPrefix) else {
+                fatalError("SAWTI_TEST_HOME must be a child of the system temporary directory")
+            }
+        } else {
+            // Keep direct XCTest launches away from the user's app-support
+            // data even when the isolation wrapper was not used. This only
+            // redirects app-owned file paths; macOS UserDefaults remains
+            // managed separately by the test suite's DefaultsSuite helper.
+            candidate = temporaryDirectory.appendingPathComponent(
+                "MeetingTranscriberTests-\(ProcessInfo.processInfo.processIdentifier)",
+                isDirectory: true,
+            )
+        }
+        return candidate
+    }()
+
+    /// User Library/Application Support. Tests derive this from their isolated
+    /// home instead of FileManager's real user-domain search result.
+    static let applicationSupportDirectory: URL = {
+        if isRunningTests {
+            return homeDirectory
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
+        }
+        return FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? homeDirectory.appendingPathComponent("Library/Application Support", isDirectory: true)
+    }()
+
     /// App data directory: `~/Library/Application Support/MeetingTranscriber/`
     /// In sandbox, this automatically resolves to the container path.
     /// Falls back to `~/.MeetingTranscriber/` if Application Support is unavailable.
     static let dataDir: URL = {
-        if let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            return appSupport.appendingPathComponent("MeetingTranscriber", isDirectory: true)
+        if isRunningTests || FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first != nil {
+            return applicationSupportDirectory.appendingPathComponent("MeetingTranscriber", isDirectory: true)
         }
         Logger(subsystem: logSubsystem, category: "AppPaths")
             .error("Application Support directory unavailable — falling back to home directory")
-        return FileManager.default.homeDirectoryForCurrentUser
+        return homeDirectory
             .appendingPathComponent(".MeetingTranscriber", isDirectory: true)
     }()
 
@@ -32,6 +85,11 @@ enum AppPaths {
     /// Default protocols output in Downloads: `~/Downloads/MeetingTranscriber/`
     /// In sandbox, `FileManager.urls(for: .downloadsDirectory)` resolves to the container-granted path.
     static let downloadsProtocolsDir: URL = {
+        if isRunningTests {
+            return homeDirectory
+                .appendingPathComponent("Downloads", isDirectory: true)
+                .appendingPathComponent("MeetingTranscriber", isDirectory: true)
+        }
         guard let downloads = FileManager.default
             .urls(for: .downloadsDirectory, in: .userDomainMask).first
         else {
@@ -55,7 +113,7 @@ enum AppPaths {
         .appendingPathComponent("\(Bundle.main.bundleIdentifier ?? "MeetingTranscriber").running")
 
     /// Legacy IPC directory (`~/.meeting-transcriber/`) used before sandbox migration.
-    private static let legacyIpcDir = FileManager.default.homeDirectoryForCurrentUser
+    private static let legacyIpcDir = homeDirectory
         .appendingPathComponent(".meeting-transcriber", isDirectory: true)
 
     private static let logger = Logger(subsystem: logSubsystem, category: "AppPaths")

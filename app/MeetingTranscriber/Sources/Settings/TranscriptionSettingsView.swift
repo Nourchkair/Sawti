@@ -254,10 +254,8 @@ struct TranscriptionSettingsView: View {
 
     /// Whether any Nemotron multilingual model variant is already on disk.
     private var nemotronModelDownloaded: Bool {
-        guard let base = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask,
-        ).first else { return false }
-        let dir = base.appendingPathComponent("FluidAudio/Models/nemotron-multilingual")
+        let dir = AppPaths.applicationSupportDirectory
+            .appendingPathComponent("FluidAudio/Models/nemotron-multilingual")
         return FileManager.default.fileExists(atPath: dir.path)
     }
 
