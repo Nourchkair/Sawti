@@ -13,12 +13,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/sawti-paths.sh"
 SPM_DIR="$REPO_ROOT/app/MeetingTranscriber"
 APP_BUNDLE="$SPM_DIR/.build/MeetingTranscriber-Dev.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/MeetingTranscriber"
 MT_CLI_DIR="$REPO_ROOT/tools/mt-cli"
 MT_CLI_BIN="$MT_CLI_DIR/.build/debug/mt-cli"
-TOKEN_FILE="$HOME/Library/Application Support/MeetingTranscriber/.rpc-token"
+TOKEN_FILE="$SAWTI_RPC_TOKEN_FILE"
 
 step() { printf "\n\033[1;34m==> %s\033[0m\n" "$1"; }
 ok()   { printf "    \033[0;32m✓\033[0m %s\n" "$1"; }
@@ -60,14 +61,26 @@ ok "signed"
 
 # --- Launch with env var. ---
 step "Launching with MEETINGTRANSCRIBER_DEBUG_RPC=1"
-MEETINGTRANSCRIBER_DEBUG_RPC=1 open -gj "$APP_BUNDLE"
-# Poll for the listener instead of a fixed sleep.
-for _ in $(seq 1 30); do
-    if lsof -i :9876 >/dev/null 2>&1; then break; fi
-    sleep 0.2
+sawti_open_app "$APP_BUNDLE" -g -j --env MEETINGTRANSCRIBER_DEBUG_RPC=1
+# Cold app startup includes a local model warm-up. Wait for an authenticated
+# health response, not merely an open socket, so this gate proves the server
+# can service the request and honors the token the CLI will use.
+for _ in $(seq 1 "${SAWTI_RPC_READY_TIMEOUT_S:-90}"); do
+    if [ -s "$TOKEN_FILE" ]; then
+        TOKEN=$(cat "$TOKEN_FILE")
+        if curl --silent --fail --max-time 2 \
+            --header "Authorization: Bearer $TOKEN" \
+            "http://127.0.0.1:9876/healthz" >/dev/null 2>&1; then
+            break
+        fi
+    fi
+    sleep 1
 done
-lsof -i :9876 >/dev/null 2>&1 || fail "server did not bind to :9876 within 6s"
-ok "listening on :9876"
+[ -s "$TOKEN_FILE" ] || fail "RPC token was not created"
+curl --silent --fail --max-time 2 --header "Authorization: Bearer $(cat "$TOKEN_FILE")" \
+    "http://127.0.0.1:9876/healthz" >/dev/null 2>&1 \
+    || fail "authenticated RPC /healthz did not respond within ${SAWTI_RPC_READY_TIMEOUT_S:-90}s"
+ok "authenticated RPC /healthz responded"
 
 # Cleanup on exit.
 trap 'pkill -f MeetingTranscriber-Dev 2>/dev/null || true' EXIT

@@ -798,11 +798,16 @@ final class PipelineQueueTests: XCTestCase {
     func testRecoverFindsUntrackedMixWav() async throws {
         let recDir = tmpDir.appendingPathComponent("recordings")
         try FileManager.default.createDirectory(at: recDir, withIntermediateDirectories: true)
+        let freshQueue = PipelineQueue(logDir: tmpDir)
+        // Production completes the one-time migration before a new orphan can
+        // be written. Seed the empty ledger first so this fixture represents a
+        // recording created after migration, rather than legacy audio that the
+        // migration is intentionally meant to mark as already processed.
+        await freshQueue.processedLedger.migrate(recordingsDir: recDir)
 
         let mixFile = recDir.appendingPathComponent("20260311_100000_mix.wav")
         try Data(repeating: 0xFF, count: 100).write(to: mixFile)
 
-        let freshQueue = PipelineQueue(logDir: tmpDir)
         await freshQueue.recoverOrphanedRecordings(recordingsDir: recDir)
 
         XCTAssertEqual(freshQueue.jobs.count, 1)
@@ -816,8 +821,6 @@ final class PipelineQueueTests: XCTestCase {
     func testRecoveredJobCapturesCurrentTranscriptOutputOptions() async throws {
         let recDir = tmpDir.appendingPathComponent("recordings")
         try FileManager.default.createDirectory(at: recDir, withIntermediateDirectories: true)
-        let mixFile = recDir.appendingPathComponent("20260311_100000_mix.wav")
-        try Data(repeating: 0xFF, count: 100).write(to: mixFile)
         let engine = MockEngine()
         let freshQueue = PipelineQueue(
             engine: engine,
@@ -833,6 +836,10 @@ final class PipelineQueueTests: XCTestCase {
                 )
             },
         )
+        await freshQueue.processedLedger.migrate(recordingsDir: recDir)
+
+        let mixFile = recDir.appendingPathComponent("20260311_100000_mix.wav")
+        try Data(repeating: 0xFF, count: 100).write(to: mixFile)
 
         await freshQueue.recoverOrphanedRecordings(recordingsDir: recDir)
 
@@ -878,13 +885,14 @@ final class PipelineQueueTests: XCTestCase {
     func testRecoverFindsCompanionTracks() async throws {
         let recDir = tmpDir.appendingPathComponent("recordings")
         try FileManager.default.createDirectory(at: recDir, withIntermediateDirectories: true)
+        let freshQueue = PipelineQueue(logDir: tmpDir)
+        await freshQueue.processedLedger.migrate(recordingsDir: recDir)
 
         let prefix = "20260311_100000"
         try Data(repeating: 0xFF, count: 100).write(to: recDir.appendingPathComponent("\(prefix)_mix.wav"))
         try Data(repeating: 0xFF, count: 100).write(to: recDir.appendingPathComponent("\(prefix)_app.wav"))
         try Data(repeating: 0xFF, count: 100).write(to: recDir.appendingPathComponent("\(prefix)_mic.wav"))
 
-        let freshQueue = PipelineQueue(logDir: tmpDir)
         await freshQueue.recoverOrphanedRecordings(recordingsDir: recDir)
 
         XCTAssertEqual(freshQueue.jobs.count, 1)
@@ -957,12 +965,13 @@ final class PipelineQueueTests: XCTestCase {
         // verify both complete.
         let recDir = tmpDir.appendingPathComponent("recordings")
         try FileManager.default.createDirectory(at: recDir, withIntermediateDirectories: true)
+        let freshQueue = PipelineQueue(logDir: tmpDir)
+        await freshQueue.processedLedger.migrate(recordingsDir: recDir)
         for i in 0 ..< 50 {
             let mixFile = recDir.appendingPathComponent("20260311_10000\(i)_mix.wav")
             try Data(repeating: 0xFF, count: 100).write(to: mixFile)
         }
 
-        let freshQueue = PipelineQueue(logDir: tmpDir)
         async let recovery: Void = freshQueue.recoverOrphanedRecordings(recordingsDir: recDir)
 
         var counter = 0

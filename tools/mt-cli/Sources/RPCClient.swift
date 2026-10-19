@@ -27,16 +27,35 @@ struct RPCClient {
         }
     }
 
-    /// Default app data dir on macOS. Mirrors `AppPaths.dataDir` in the app —
-    /// duplicated here so mt-cli has no dependency on the app's source.
-    static let defaultTokenURL: URL = {
-        let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support")
+    /// Resolve the app-owned token beside Sawti's private state. Mirrors
+    /// `AppPaths.dataDir` while keeping mt-cli independent of the app target.
+    /// The disposable-home override lets live E2E drivers authenticate against
+    /// the same isolated app instance instead of reading a user's real token.
+    static func tokenURL(
+        environment: [String: String],
+        defaultAppSupportDirectory: URL,
+    ) -> URL {
+        var appSupport = defaultAppSupportDirectory
+        if let testHome = environment["SAWTI_TEST_HOME"] {
+            appSupport = URL(fileURLWithPath: testHome, isDirectory: true)
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
+        }
         return appSupport
-            .appendingPathComponent("MeetingTranscriber")
+            .appendingPathComponent("Sawti", isDirectory: true)
             .appendingPathComponent(".rpc-token")
+    }
+
+    static let defaultTokenURL: URL = {
+        let fileManager = FileManager.default
+        let appSupport = fileManager
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
+        return tokenURL(
+            environment: ProcessInfo.processInfo.environment,
+            defaultAppSupportDirectory: appSupport,
+        )
     }()
 
     // Hardcoded literal — URL(string:) cannot fail on a constant valid URL.

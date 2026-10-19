@@ -54,6 +54,7 @@ while [ $# -gt 0 ]; do
 done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/sawti-paths.sh"
 # shellcheck source=lib/e2e-helpers.sh
 source "$ROOT/scripts/lib/e2e-helpers.sh"
 DEV_BUNDLE_BUILD="$ROOT/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app"
@@ -73,7 +74,7 @@ SIM="$ROOT/tools/meeting-simulator/.build/release/meeting-simulator"
 # shellcheck source=lib/bundle-ids.sh
 source "$ROOT/scripts/lib/bundle-ids.sh"
 BUNDLE_ID="$DEV_BUNDLE_ID"
-REC_DIR="$HOME/Library/Application Support/MeetingTranscriber/recordings"
+REC_DIR="$SAWTI_RECORDINGS_DIR"
 # Anchor for the EXIT-trap artifact sweep: created before any recording, so
 # every file this run produces is newer than it (see sweep_run_artifacts).
 RUN_START_MARKER="$(mktemp "${TMPDIR:-/tmp}/e2e-silent-rec-start.XXXXXX")"

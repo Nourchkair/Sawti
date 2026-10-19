@@ -86,6 +86,7 @@ while [ $# -gt 0 ]; do
 done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/sawti-paths.sh"
 # shellcheck source=lib/e2e-helpers.sh
 source "$ROOT/scripts/lib/e2e-helpers.sh"
 # Stable deploy path so the runner's manual TCC grants survive rebuilds; see
@@ -98,7 +99,7 @@ NOISE="$ROOT/scripts/play-quiet-noise.swift"
 # shellcheck source=lib/bundle-ids.sh
 source "$ROOT/scripts/lib/bundle-ids.sh"
 BUNDLE_ID="$DEV_BUNDLE_ID"
-REC_DIR="$HOME/Library/Application Support/MeetingTranscriber/recordings"
+REC_DIR="$SAWTI_RECORDINGS_DIR"
 RUN_START_MARKER="$(mktemp "${TMPDIR:-/tmp}/e2e-channel-fault-start.XXXXXX")"
 
 # The loopback device the microphone track reads from. Named, not a UID:
@@ -241,7 +242,7 @@ set_dev_default debugRPCEnabled                 true              bool
 # this way and why its microphone works; copying the direct launch from
 # `e2e-silent-recording.sh` is what made this lane report a zeroed channel on
 # the runner for a day.
-open "$DEV_BUNDLE_DEPLOY"
+sawti_open_app "$DEV_BUNDLE_DEPLOY"
 
 echo "▸ Waiting for RPC on 127.0.0.1:9876…"
 wait_for_rpc "$MTCLI" 30 || die "RPC server did not start within 30 s"

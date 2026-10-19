@@ -51,12 +51,13 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT/scripts/lib/sawti-paths.sh"
 DEV_BUNDLE_BUILD="$ROOT/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app"
 DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
 SIMULATOR_PKG="$ROOT/tools/meeting-simulator"
 SIMULATOR_BIN="$SIMULATOR_PKG/.build/release/meeting-simulator"
 DEFAULT_FIXTURE="$ROOT/app/MeetingTranscriber/Tests/Fixtures/two_speakers_de.wav"
-RPC_TOKEN_FILE="$HOME/Library/Application Support/MeetingTranscriber/.rpc-token"
+RPC_TOKEN_FILE="$SAWTI_RPC_TOKEN_FILE"
 RPC_BASE="http://127.0.0.1:9876"
 # shellcheck source=lib/bundle-ids.sh
 source "$ROOT/scripts/lib/bundle-ids.sh"
@@ -69,7 +70,7 @@ BUNDLE_ID="$DEV_BUNDLE_ID"
 # RPC up: same budget as e2e-app.sh (Parakeet model is now pre-warmed at
 # launch via the liveTranscriptionEnabled toggle, so first speech can fire
 # as soon as the simulator starts playing).
-RPC_READY_TIMEOUT_S=30
+RPC_READY_TIMEOUT_S="${SAWTI_RPC_READY_TIMEOUT_S:-90}"
 # Time from simulator start to first finalised caption. Parakeet typically
 # emits a finalised utterance ~3-6 s after the first speech segment ends;
 # 90 s is generous so a model load on a cold runner doesn't blow the budget.
@@ -159,7 +160,7 @@ else
         || fail "re-sign of the deployed bundle failed — see the message above"
 fi
 
-if [ ! -x "$SIMULATOR_BIN" ]; then
+if [ ! -x "$SIMULATOR_BIN" ] || [ "$SIMULATOR_PKG/Sources/main.swift" -nt "$SIMULATOR_BIN" ]; then
     log "Building meeting-simulator"
     (cd "$SIMULATOR_PKG" && swift build -c release)
 fi
@@ -183,7 +184,7 @@ if [ "$fg_user" != "$my_user" ]; then
 fi
 
 log "Launching $DEV_BUNDLE_DEPLOY"
-open "$DEV_BUNDLE_DEPLOY"
+sawti_open_app "$DEV_BUNDLE_DEPLOY"
 
 log "Waiting up to ${RPC_READY_TIMEOUT_S}s for RPC /healthz"
 # Assigns RPC_TOKEN in caller scope on success so subsequent `rpc` calls

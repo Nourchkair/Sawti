@@ -46,6 +46,13 @@ struct MeetingSimulator: ParsableCommand {
     """)
     var duration: Double?
 
+    @Option(name: .long, help: """
+    Wait N seconds after showing the meeting window and starting its power
+    assertion before playing the fixture. Useful for verifying that capture
+    has attached before the first spoken audio begins. Defaults to 0.
+    """)
+    var playbackDelay: Double = 0
+
     @Flag(help: """
     Keep replaying the fixture instead of exiting when it ends. Audible mode
     normally exits through `audioPlayerDidFinishPlaying`, which caps a meeting
@@ -59,6 +66,12 @@ struct MeetingSimulator: ParsableCommand {
         if let duration, duration <= 0 {
             throw ValidationError("--duration must be a positive number of seconds, got \(duration).")
         }
+        if !playbackDelay.isFinite || playbackDelay < 0 {
+            throw ValidationError("--playback-delay must be a finite non-negative number, got \(playbackDelay).")
+        }
+        if let duration, duration <= playbackDelay {
+            throw ValidationError("--duration must exceed --playback-delay so playback can start before the simulator closes.")
+        }
     }
 
     func run() {
@@ -67,10 +80,11 @@ struct MeetingSimulator: ParsableCommand {
         let silentMode = silent
         let dur = duration
         let looping = loop
+        let delay = playbackDelay
         MainActor.assumeIsolated {
             runSimulator(
                 fixturePath: fixturePath, windowTitle: windowTitle,
-                silent: silentMode, loop: looping, duration: dur,
+                silent: silentMode, loop: looping, duration: dur, playbackDelay: delay,
             )
         }
     }
@@ -123,7 +137,8 @@ private let defaultSilentDuration: Double = 60
 /// dance from inside ArgumentParser's `run()` and never returns.
 @MainActor
 func runSimulator(
-    fixturePath: String, windowTitle: String, silent: Bool, loop: Bool, duration: Double?,
+    fixturePath: String, windowTitle: String, silent: Bool, loop: Bool,
+    duration: Double?, playbackDelay: Double,
 ) {
     // Fail fast before any AppKit / IOKit state is created.
     guard FileManager.default.fileExists(atPath: fixturePath) else {
@@ -142,6 +157,9 @@ func runSimulator(
     print("Window: \"\(windowTitle)\"")
     print("PID: \(ProcessInfo.processInfo.processIdentifier)")
     print(silent ? "Audio: <silent mode — zero-volume playback>" : "Audio: \(fixturePath)")
+    if playbackDelay > 0 {
+        print("Playback starts after \(String(format: "%.1f", playbackDelay))s.")
+    }
     print("Leave button visible for AX verification")
 
     let delegate = AppDelegate(assertionID: assertionID)
@@ -151,15 +169,21 @@ func runSimulator(
     // Non-silent mode without an explicit --duration exits via the audio
     // player's finish callback, so its effective duration is nil. Looping
     // removes that callback, so it needs the timed exit silent mode uses.
-    let effectiveDuration = duration ?? ((silent || loop) ? defaultSilentDuration : nil)
-    startPlayback(
-        fixturePath: fixturePath,
-        mode: PlaybackMode(
-            silent: silent, loop: loop, timedDuration: effectiveDuration ?? defaultSilentDuration,
-        ),
-        label: label,
-        delegate: delegate,
+    let effectiveDuration = duration ?? ((silent || loop) ? defaultSilentDuration + playbackDelay : nil)
+    let playbackMode = PlaybackMode(
+        silent: silent, loop: loop, timedDuration: effectiveDuration ?? defaultSilentDuration,
     )
+    if playbackDelay > 0 {
+        label.stringValue = "Waiting to play audio\n(\(String(format: "%.0f", playbackDelay))s)"
+        DispatchQueue.main.asyncAfter(deadline: .now() + playbackDelay) {
+            MainActor.assumeIsolated {
+                print("Playback delay elapsed — starting fixture audio.")
+                startPlayback(fixturePath: fixturePath, mode: playbackMode, label: label, delegate: delegate)
+            }
+        }
+    } else {
+        startPlayback(fixturePath: fixturePath, mode: playbackMode, label: label, delegate: delegate)
+    }
 
     if let effectiveDuration {
         DispatchQueue.main.asyncAfter(deadline: .now() + effectiveDuration) {

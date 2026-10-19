@@ -5,8 +5,31 @@ import XCTest
 final class RPCClientTests: XCTestCase {
     func testDefaultTokenURLPointsAtAppDataDir() {
         let path = RPCClient.defaultTokenURL.path
-        XCTAssertTrue(path.contains("MeetingTranscriber"))
+        XCTAssertTrue(path.contains("/Library/Application Support/Sawti/"))
         XCTAssertTrue(path.hasSuffix(".rpc-token"))
+    }
+
+    func testTokenURLUsesDisposableSawtiHomeWhenProvided() {
+        let home = URL(fileURLWithPath: "/private/tmp/sawti-test", isDirectory: true)
+        let appSupport = URL(fileURLWithPath: "/Users/test/Library/Application Support", isDirectory: true)
+
+        let url = RPCClient.tokenURL(
+            environment: ["SAWTI_TEST_HOME": home.path],
+            defaultAppSupportDirectory: appSupport,
+        )
+
+        XCTAssertEqual(
+            url.path,
+            "/private/tmp/sawti-test/Library/Application Support/Sawti/.rpc-token",
+        )
+    }
+
+    func testTokenURLUsesApplicationSupportWithoutTestOverride() {
+        let appSupport = URL(fileURLWithPath: "/Users/test/Library/Application Support", isDirectory: true)
+
+        let url = RPCClient.tokenURL(environment: [:], defaultAppSupportDirectory: appSupport)
+
+        XCTAssertEqual(url.path, "/Users/test/Library/Application Support/Sawti/.rpc-token")
     }
 
     func testDefaultBaseURLIsLoopback() {

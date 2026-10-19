@@ -146,6 +146,7 @@ case "$*" in
             && { [ -z "${STUB_EXECUTABLE:-}" ] || grep -q 'previous build' "$STUB_EXECUTABLE" 2>/dev/null; }; then
             cp "$STUB_LEAF_DER" ./codesign0
         fi ;;
+    *--verify*SawtiCaptureHelper*) exit 0 ;;
     *--verify*) exit 1 ;;
     *"--entitlements :-"*) printf '<key>stand-in</key>' ;;
 esac
@@ -227,17 +228,22 @@ _stage_dev_bundle_scripts() {
     spm="$root/app/MeetingTranscriber"
     bundle="$spm/.build/MeetingTranscriber-Dev.app"
     mkdir -p "$root/scripts/lib" "$root/licenses" "$root/tools/mt-cli" \
-        "$spm/Sources" "$spm/Entitlements" "$spm/.build/release" "$bundle/Contents/MacOS" || return 1
+        "$spm/Sources/Resources" "$spm/Entitlements" "$spm/.build/release" \
+        "$bundle/Contents/MacOS" "$bundle/Contents/Helpers" || return 1
     cp "$REPO_ROOT/scripts/run_app.sh" "$REPO_ROOT/scripts/test_rpc.sh" "$root/scripts/" || return 1
     cp "$REPO_ROOT"/scripts/lib/*.sh "$root/scripts/lib/" || return 1
     cp "$REPO_ROOT/app/MeetingTranscriber/Sources/Info.plist" "$spm/Sources/" || return 1
+    cp "$REPO_ROOT/app/MeetingTranscriber/Sources/Resources/SawtiLogo.png" \
+        "$spm/Sources/Resources/" || return 1
     cp "$REPO_ROOT/app/MeetingTranscriber/Entitlements/Homebrew.entitlements" "$spm/Entitlements/" || return 1
     ln -s "$STUB_HARNESS/fetch-localvqe-model.sh" "$root/scripts/fetch-localvqe-model.sh" || return 1
     printf '0.0.0\n' > "$root/VERSION"
     printf 'stand-in licence\n' > "$root/licenses/Test-LICENSE.txt"
     printf 'previous build\n' > "$bundle/Contents/MacOS/MeetingTranscriber"
     printf 'fresh build\n' > "$spm/.build/release/MeetingTranscriber"
+    printf 'fresh helper\n' > "$spm/.build/release/SawtiCaptureHelper"
     chmod +x "$bundle/Contents/MacOS/MeetingTranscriber" "$spm/.build/release/MeetingTranscriber"
+    chmod +x "$spm/.build/release/SawtiCaptureHelper"
 }
 
 # Runs one of the staged scripts with the stand-ins first on PATH; its output
@@ -256,7 +262,8 @@ _run_dev_bundle_script() {
 
 # The identity a staged script signed with, from the codesign log.
 _signed_with() {
-    sed -n 's/.*--sign \([^ ]*\).*/\1/p' "$1/codesign.log" 2>/dev/null | tail -1
+    grep -v 'SawtiCaptureHelper' "$1/codesign.log" 2>/dev/null \
+        | sed -n 's/.*--sign \([^ ]*\).*/\1/p' | tail -1
 }
 
 # Each test has one exit point, so the temp dir is removed exactly once: a

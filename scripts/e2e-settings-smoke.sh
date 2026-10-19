@@ -18,10 +18,11 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/sawti-paths.sh"
 # build_release.sh assembles the bundle at the repo-root .build/release (it moves
 # the .app back there after staging the DMG), NOT the SPM package's .build.
 APP="$REPO_ROOT/.build/release/MeetingTranscriber.app"
-TOKEN_FILE="$HOME/Library/Application Support/MeetingTranscriber/.rpc-token"
+TOKEN_FILE="$SAWTI_RPC_TOKEN_FILE"
 BASE="http://127.0.0.1:9876"
 TREE_JSON="$(mktemp)"
 
@@ -58,13 +59,16 @@ sleep 1
 ok "built $APP"
 
 step "Launch with MEETINGTRANSCRIBER_DEBUG_RPC=1"
-MEETINGTRANSCRIBER_DEBUG_RPC=1 open -gj "$APP"
-for _ in $(seq 1 60); do
-    [ -s "$TOKEN_FILE" ] && lsof -i :9876 >/dev/null 2>&1 && break
-    sleep 0.5
+sawti_open_app "$APP" -g -j --env MEETINGTRANSCRIBER_DEBUG_RPC=1
+for _ in $(seq 1 "${SAWTI_RPC_READY_TIMEOUT_S:-90}"); do
+    if [ -s "$TOKEN_FILE" ]; then
+        TOKEN=$(cat "$TOKEN_FILE")
+        if curl -sf --max-time 2 -H "Authorization: Bearer $TOKEN" \
+            "$BASE/healthz" -o /dev/null; then break; fi
+    fi
+    sleep 1
 done
 [ -s "$TOKEN_FILE" ] || fail "RPC token never appeared — the app didn't start the RPC server"
-lsof -i :9876 >/dev/null 2>&1 || fail "nothing bound :9876 within 30s"
 TOKEN=$(cat "$TOKEN_FILE")
 AUTH=(-H "Authorization: Bearer $TOKEN")
 curl -sf --max-time 15 "${AUTH[@]}" -o /dev/null "$BASE/healthz" || fail "RPC not reachable on :9876"

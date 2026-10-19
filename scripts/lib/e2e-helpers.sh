@@ -223,6 +223,20 @@ restore_int_default() {
     fi
 }
 
+# String companion to the typed restore helpers. Empty `saved` means the key
+# was unset before the lane; otherwise it is written back as a string while
+# preserving any spaces in the captured value.
+restore_string_default() {
+    local bundle="$1"
+    local key="$2"
+    local saved="$3"
+    if [ -n "$saved" ]; then
+        /usr/bin/defaults write "$bundle" "$key" "$saved"
+    else
+        /usr/bin/defaults delete "$bundle" "$key" 2>/dev/null || true
+    fi
+}
+
 # Write a dev-bundle default so the RUNNING APP actually sees it.
 #
 # Say once per run that this host redirects `defaults <bundle-id>` into a

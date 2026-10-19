@@ -64,6 +64,7 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT/scripts/lib/sawti-paths.sh"
 DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
 MTCLI_PKG="$ROOT/tools/mt-cli"
 MTCLI="$MTCLI_PKG/.build/release/mt-cli"
@@ -73,9 +74,9 @@ FIXTURES_DIR="$ROOT/scripts/fixtures"
 KEEPER="$FIXTURES_DIR/jitsi-keeper.mjs"
 CDP_PORT=9222
 KEEPER_PID=""
-RPC_TOKEN_FILE="$HOME/Library/Application Support/MeetingTranscriber/.rpc-token"
+RPC_TOKEN_FILE="$SAWTI_RPC_TOKEN_FILE"
 RPC_BASE="http://127.0.0.1:9876"
-RECORDINGS_DIR="$HOME/Downloads/MeetingTranscriber/recordings"
+RECORDINGS_DIR="$SAWTI_OUTPUT_RECORDINGS_DIR"
 # Resolve the target browser. All four are Chromium forks sharing one detection
 # pattern, but each is carried under its OWN identity, so the lane differs only
 # in which .app it launches and how it labels diagnostics. BROWSER_LABEL is also
@@ -113,7 +114,7 @@ _STANDARD_PLIST="$(dev_standard_plist)"
 
 # --- timing budgets -------------------------------------------------------
 
-RPC_READY_TIMEOUT_S=30   # dev-app cold start (model preload etc.)
+RPC_READY_TIMEOUT_S="${SAWTI_RPC_READY_TIMEOUT_S:-90}" # local model warm-up can delay cold launch
 DETECT_TIMEOUT_S=90      # Chrome launch + assertion + detector poll + prompt park
 RECORD_SECONDS=15        # how long to let the tone record
 STOP_TIMEOUT_S=120       # Chrome quit → assertion drop → endGrace → recorder finalize
@@ -249,7 +250,7 @@ rm -f "/tmp/e2e-browser-$BROWSER-app.wav" "/tmp/e2e-browser-$BROWSER-meta.json"
 # --- launch + cleanup trap ------------------------------------------------
 
 log "Launching $DEV_BUNDLE_DEPLOY"
-open "$DEV_BUNDLE_DEPLOY"
+sawti_open_app "$DEV_BUNDLE_DEPLOY"
 
 _ON_EXIT_RAN=""
 on_exit() {

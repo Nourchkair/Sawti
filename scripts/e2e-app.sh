@@ -26,9 +26,11 @@ set -euo pipefail
 
 APP_AFTER=quit           # quit | leave
 SIMULATOR_FIXTURE=""     # custom audio fixture for the simulator
+SIMULATOR_PLAYBACK_DELAY=0 # delay fixture audio after the meeting assertion is visible
 NO_BUILD=false           # skip build/deploy/re-sign — use whatever's at ~/Applications already
 TWO_MEETINGS=false       # trigger two back-to-back meetings to validate cooldown + state reset
 MIC_ONLY=false           # drive a microphone-only recording over /v1/record and assert its sidecar
+NO_MIC=false             # exercise an app-audio meeting without activating the microphone path
 RECORD_ONLY=false        # validate record-only mode (sidecar+WAV instead of transcript)
 REIMPORT_RECORDED=false  # chain a record-only meeting with re-import via POST /action/enqueueFile
 REIMPORT_LATEST=false    # skip live-record phase, re-import the freshest *_mix.wav already on disk
@@ -50,8 +52,18 @@ while [ $# -gt 0 ]; do
         --keep-app)         APP_AFTER=leave ;;
         --no-build)         NO_BUILD=true ;;
         --fixture)          shift; SIMULATOR_FIXTURE="$1" ;;
+        --playback-delay)
+            if [ "$#" -lt 2 ] || [[ "$2" == -* ]]; then
+                echo "Error: --playback-delay requires a non-negative whole number of seconds" >&2
+                exit 2
+            fi
+            shift
+            SIMULATOR_PLAYBACK_DELAY="$1"
+            ;;
+        --playback-delay=*)  SIMULATOR_PLAYBACK_DELAY="${1#*=}" ;;
         --two-meetings)     TWO_MEETINGS=true ;;
         --mic-only)         MIC_ONLY=true ;;
+        --no-mic)           NO_MIC=true ;;
         --record-only)      RECORD_ONLY=true ;;
         --reimport-recorded) REIMPORT_RECORDED=true ;;
         --reimport-latest)  REIMPORT_LATEST=true ;;
@@ -68,8 +80,8 @@ while [ $# -gt 0 ]; do
         --quit-foreign-app) QUIT_FOREIGN_APP=true ;;
         -h|--help)
             cat <<'HELP'
-Usage: e2e-app.sh [--no-build] [--keep-app] [--two-meetings] [--record-only]
-                  [--reimport-recorded | --reimport-latest] [--keep-recordings]
+Usage: e2e-app.sh [--no-build] [--keep-app] [--two-meetings] [--record-only] [--no-mic]
+                  [--playback-delay SEC] [--reimport-recorded | --reimport-latest] [--keep-recordings]
                   [--naming-escape] [--naming-switch] [--echo-bleed] [--echo-cancel]
                   [--naming-confirm] [--fixture path/to.wav]
 
@@ -84,6 +96,13 @@ Usage: e2e-app.sh [--no-build] [--keep-app] [--two-meetings] [--record-only]
   --record-only        Enable record-only mode: assert on sidecar JSON + mix WAV instead
                        of transcript/protocol. Exercises the WatchLoop branch that
                        skips VAD/transcription/diarization/protocol generation.
+  --no-mic             Set the app-only recording mode for this run. The setting is
+                       restored afterwards; useful for proving process-tap capture
+                       independently of microphone audio.
+  --playback-delay SEC Delay the simulator fixture after its meeting window/assertion
+                       appears. In record-only mode this waits for Sawti to report an
+                       active recording before playback, then requires at least 36 s
+                       of active app-track audio from the default 37.5 s fixture.
   --reimport-recorded  Chain a record-only meeting with a re-import via the
                        POST /action/enqueueFile RPC: capture audio live, write
                        a WAV, then feed that WAV back in through the "Open from
@@ -92,7 +111,7 @@ Usage: e2e-app.sh [--no-build] [--keep-app] [--two-meetings] [--record-only]
                        AudioMixer 3-tier file-load fallback in one pass.
                        Self-contained — no prior run required.
   --reimport-latest    Skip the live-record phase and re-import the freshest
-                       *_mix.wav already in ~/Downloads/MeetingTranscriber/recordings/.
+                       *_mix.wav already in ~/Downloads/Sawti/recordings/.
                        Pair with a previous `--record-only --keep-recordings`
                        run (CI uses this to chain steps without re-recording;
                        locally also useful for silent fast iteration on the
@@ -208,6 +227,23 @@ if [ "$REIMPORT_RECORDED" = true ] && [ "$REIMPORT_LATEST" = true ]; then
     exit 2
 fi
 
+case "$SIMULATOR_PLAYBACK_DELAY" in
+    ''|*[!0-9]*) echo "Error: --playback-delay requires a non-negative whole number of seconds" >&2; exit 2 ;;
+esac
+SIMULATOR_PLAYBACK_DELAY=$((10#$SIMULATOR_PLAYBACK_DELAY))
+[ "$SIMULATOR_PLAYBACK_DELAY" -le 120 ] \
+    || { echo "Error: --playback-delay must be at most 120 seconds" >&2; exit 2; }
+if [ "$SIMULATOR_PLAYBACK_DELAY" -eq 1 ]; then
+    echo "Error: --playback-delay must be at least 2 seconds to verify recording before audio" >&2
+    exit 2
+fi
+if [ "$SIMULATOR_PLAYBACK_DELAY" -gt 0 ] \
+    && { { [ "$RECORD_ONLY" != true ] && [ "$REIMPORT_RECORDED" != true ]; } \
+        || [ "$NO_MIC" != true ] || [ "$REIMPORT_LATEST" = true ]; }; then
+    echo "Error: --playback-delay requires --no-mic plus --record-only or --reimport-recorded, and a live simulator capture" >&2
+    exit 2
+fi
+
 # --naming-confirm is a standalone lane (its own enqueue + poll + confirm flow).
 # Reject combinations up-front so a typo can't silently fall through to another
 # lane's branch in the dispatch chain below.
@@ -246,7 +282,7 @@ fi
 # --mic-only drives its own recording over /v1/record and reroutes the machine's
 # audio output; sharing a run with a meeting lane would have the detector start a
 # second recording next to it.
-if [ "$MIC_ONLY" = true ] && { [ "$RECORD_ONLY" = true ] || [ "$NAMING_CONFIRM" = true ] \
+if [ "$MIC_ONLY" = true ] && { [ "$NO_MIC" = true ] || [ "$RECORD_ONLY" = true ] || [ "$NAMING_CONFIRM" = true ] \
     || [ "$NAMING_ESCAPE" = true ] || [ "$REIMPORT_RECORDED" = true ] || [ "$REIMPORT_LATEST" = true ] \
     || [ "$MIC_DEVICE_CHANGE" = true ] || [ "$CRASH_RECOVERY" = true ] || [ "$REDEPLOY_ONLY" = true ] \
     || [ "$TWO_MEETINGS" = true ] || [ "$ECHO_BLEED" = true ] || [ "$ECHO_CANCEL" = true ] \
@@ -312,6 +348,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT/scripts/lib/sawti-paths.sh"
 DEV_BUNDLE_BUILD="$ROOT/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app"
 DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
 SIMULATOR_PKG="$ROOT/tools/meeting-simulator"
@@ -319,7 +356,7 @@ SIMULATOR_BIN="$SIMULATOR_PKG/.build/release/meeting-simulator"
 MTCLI_PKG="$ROOT/tools/mt-cli"
 MTCLI="$MTCLI_PKG/.build/release/mt-cli"
 DEFAULT_FIXTURE="$ROOT/app/MeetingTranscriber/Tests/Fixtures/two_speakers_de.wav"
-RPC_TOKEN_FILE="$HOME/Library/Application Support/MeetingTranscriber/.rpc-token"
+RPC_TOKEN_FILE="$SAWTI_RPC_TOKEN_FILE"
 RPC_BASE="http://127.0.0.1:9876"
 
 # The app's output folder — `AppPaths.downloadsProtocolsDir`. Unsandboxed
@@ -327,7 +364,7 @@ RPC_BASE="http://127.0.0.1:9876"
 # Recordings and protocols are SIBLINGS under it: audio and its sidecar go to
 # `recordings/`, transcripts and protocols to `protocols/`. Derive both from
 # one root so an assertion cannot end up pointed at the wrong sibling.
-OUTPUT_DIR="$HOME/Downloads/MeetingTranscriber"
+OUTPUT_DIR="$SAWTI_OUTPUT_DIR"
 RECORDINGS_DIR="$OUTPUT_DIR/recordings"
 # `find -newer` marker so cleanup only touches THIS run's files — never
 # pre-existing user data (see CLAUDE.md feedback on destructive FS scans).
@@ -355,12 +392,16 @@ RECORD_ONLY_MARKER="/tmp/e2e-app-record-only-marker.$$"
 # >100-byte size check.
 IS_DEFAULT_FIXTURE=false
 [ "$SIMULATOR_FIXTURE" = "$DEFAULT_FIXTURE" ] && IS_DEFAULT_FIXTURE=true
+if [ "$SIMULATOR_PLAYBACK_DELAY" -gt 0 ] && [ "$IS_DEFAULT_FIXTURE" != true ]; then
+    echo "Error: --playback-delay completeness assertions are calibrated only for the default two_speakers_de fixture" >&2
+    exit 2
+fi
 
 # --- timing budgets -------------------------------------------------------
 
 # Cold first run downloads ~50 MB Parakeet model — give it room. Hot run
 # under 10 s easily.
-RPC_READY_TIMEOUT_S=30
+RPC_READY_TIMEOUT_S="${SAWTI_RPC_READY_TIMEOUT_S:-90}"
 PIPELINE_TIMEOUT_S=240
 
 # Record-only skips the whole pipeline, so the budget is just: detector
@@ -399,6 +440,50 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/e2e-helpers.sh"
 # the install it checks for agree on what a model file looks like.
 # shellcheck source=lib/localvqe-resources.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/localvqe-resources.sh"
+
+# Snapshot every dev-bundle preference this driver writes before the first
+# override. The test data itself is marker-cleaned, but leaving autoWatch,
+# debugRPCEnabled, echoDedupEnabled, or an experimental lane toggle behind
+# changes how the developer's next Sawti launch behaves. Restore both domains
+# that write_dev_default can touch, on success and on every trapped failure.
+_STANDARD_PLIST="$(dev_standard_plist "$DEV_BUNDLE_ID")"
+_CONTAINER_PLIST="$(dev_container_plist "$DEV_BUNDLE_ID")"
+_E2E_DEFAULT_KEYS=(debugRPCEnabled autoWatch echoDedupEnabled echoCancellationEnabled recordOnly noMic diarizerMode diarize numSpeakers)
+_E2E_DEFAULTS_STD=()
+_E2E_DEFAULTS_CTR=()
+for _key in "${_E2E_DEFAULT_KEYS[@]}"; do
+    _E2E_DEFAULTS_STD+=("$(snapshot_default "$_STANDARD_PLIST" "$_key")")
+    _E2E_DEFAULTS_CTR+=("$(snapshot_default "$_CONTAINER_PLIST" "$_key")")
+done
+_E2E_DEFAULTS_RESTORED=false
+_restore_e2e_defaults() {
+    [ "$_E2E_DEFAULTS_RESTORED" = false ] || return 0
+    _E2E_DEFAULTS_RESTORED=true
+    local index key type
+    for index in "${!_E2E_DEFAULT_KEYS[@]}"; do
+        key="${_E2E_DEFAULT_KEYS[$index]}"
+        case "$key" in
+            numSpeakers) type=int ;;
+            diarizerMode) type=string ;;
+            *) type=bool ;;
+        esac
+        case "$type" in
+            int)
+                restore_int_default "$_STANDARD_PLIST" "$key" "${_E2E_DEFAULTS_STD[$index]}"
+                restore_int_default "$_CONTAINER_PLIST" "$key" "${_E2E_DEFAULTS_CTR[$index]}"
+                ;;
+            string)
+                restore_string_default "$_STANDARD_PLIST" "$key" "${_E2E_DEFAULTS_STD[$index]}"
+                restore_string_default "$_CONTAINER_PLIST" "$key" "${_E2E_DEFAULTS_CTR[$index]}"
+                ;;
+            *)
+                restore_bool_default "$_STANDARD_PLIST" "$key" "${_E2E_DEFAULTS_STD[$index]}"
+                restore_bool_default "$_CONTAINER_PLIST" "$key" "${_E2E_DEFAULTS_CTR[$index]}"
+                ;;
+        esac
+    done
+}
+trap _restore_e2e_defaults EXIT
 
 require_command() {
     command -v "$1" >/dev/null || fail "missing command: $1"
@@ -447,7 +532,7 @@ rpc() {
 #     and never steals a live one;
 #   - the self-heal runs before every early exit, not just before the lane.
 _MIC_ONLY_DEVICE="BlackHole 2ch"
-_MIC_ONLY_OUTPUT_MARKER="$HOME/Library/Application Support/MeetingTranscriber/.e2e-mic-only-previous-output"
+_MIC_ONLY_OUTPUT_MARKER="$SAWTI_APP_SUPPORT_DIR/.e2e-mic-only-previous-output"
 
 # Read the current default output, or empty on failure.
 _mic_only_current_output() {
@@ -620,7 +705,7 @@ _other_drivers="$(_e2e_other_drivers)"
 # on a hand-run host, and a stale marker pid reused by an unrelated process
 # (both rare, both reported with the pid and command so a person can decide).
 _DEV_APP_PATTERN="MeetingTranscriber-Dev.app/Contents/MacOS/MeetingTranscriber"
-_E2E_APP_MARKER="$HOME/Library/Application Support/MeetingTranscriber/.e2e-app-launched"
+_E2E_APP_MARKER="$SAWTI_APP_SUPPORT_DIR/.e2e-app-launched"
 _running_app="$( { pgrep -f "$_DEV_APP_PATTERN" || true; } | head -1)"
 if [ -n "$_running_app" ]; then
     _marker="$(cat "$_E2E_APP_MARKER" 2>/dev/null || true)"
@@ -708,7 +793,7 @@ if [ "$REDEPLOY_ONLY" = true ]; then
     exit 0
 fi
 
-if [ ! -x "$SIMULATOR_BIN" ]; then
+if [ ! -x "$SIMULATOR_BIN" ] || [ "$SIMULATOR_PKG/Sources/main.swift" -nt "$SIMULATOR_BIN" ]; then
     log "Building meeting-simulator"
     (cd "$SIMULATOR_PKG" && swift build -c release)
 fi
@@ -744,6 +829,9 @@ fi
 # launch instead of after a Settings toggle.
 write_dev_default "$DEV_BUNDLE_ID" debugRPCEnabled true bool
 write_dev_default "$DEV_BUNDLE_ID" autoWatch true bool
+if [ "$NO_MIC" = true ]; then
+    write_dev_default "$DEV_BUNDLE_ID" noMic true bool
+fi
 # The echo dedup ships off, so the lane has to ask for it. Set unconditionally
 # rather than only for --echo-bleed: a stale toggle from an earlier run on the
 # same host would otherwise decide it, and the lane that asserts nothing is
@@ -795,8 +883,6 @@ fi
 # scripts/lib/e2e-helpers.sh for why a bare `defaults write <bundle-id>` reaches
 # a domain the app does not read). These two wrappers only bind the bundle id
 # and keep the call sites below short.
-_CONTAINER_PLIST="$(dev_container_plist)"
-_STANDARD_PLIST="$(dev_standard_plist)"
 _set_dev_default() {
     local key="$1" value="$2" type="${3:-string}"
     # `numSpeakers` is read as `defaults.object(forKey:) as? Int`, so it must be
@@ -832,7 +918,7 @@ fi
 # the pipeline-queue reset above: the destructive reset/restore machinery must
 # never touch a developer's real speaker DB. A LOCAL run therefore does NOT
 # snapshot, so the confirm will enroll into your real DB (warned below).
-_APP_SUPPORT_DIR="$HOME/Library/Application Support/MeetingTranscriber"
+_APP_SUPPORT_DIR="$SAWTI_APP_SUPPORT_DIR"
 # Durable, DETERMINISTIC backup siblings (not a random /tmp dir): a hard kill
 # between the reset and the trap-restore would strand a random mktemp backup
 # nothing ever finds again, losing the runner's real DB. Deterministic sibling
@@ -1025,13 +1111,13 @@ fi
 # regenerable queue snapshot — never recordings, speakers.json, protocols, or
 # any other user content.
 if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-    _ipc_dir="$HOME/Library/Application Support/MeetingTranscriber/ipc"
+    _ipc_dir="$SAWTI_APP_SUPPORT_DIR/ipc"
     rm -f "$_ipc_dir/pipeline_queue.json" "$_ipc_dir/pipeline_queue.tmp"
     log "CI: reset stale pipeline-queue snapshot ($_ipc_dir/pipeline_queue.json)"
 fi
 
 log "Launching $DEV_BUNDLE_DEPLOY"
-open "$DEV_BUNDLE_DEPLOY"
+sawti_open_app "$DEV_BUNDLE_DEPLOY"
 
 log "Waiting up to ${RPC_READY_TIMEOUT_S}s for RPC /healthz"
 # Assigns RPC_TOKEN in caller scope on success so subsequent `rpc` calls
@@ -1147,6 +1233,7 @@ on_exit() {
         rm -rf "$_ECHO_FIXTURE_DIR"
         _ECHO_FIXTURE_DIR=""
     fi
+    _restore_e2e_defaults
 }
 # Single cleanup hook, but the signal paths must EXIT after cleaning up: a
 # trapped INT/TERM otherwise returns into the interrupted command and execution
@@ -1187,6 +1274,12 @@ _RESOLVED_RECORD_ONLY="$(jq -r '.settings.recording.recordOnly' <<<"$_SNAP")"
 [ "$_RESOLVED_RECORD_ONLY" = "$_EXPECTED_RECORD_ONLY" ] \
     || fail "the app resolved settings.recording.recordOnly=$_RESOLVED_RECORD_ONLY but this lane needs $_EXPECTED_RECORD_ONLY. Most likely the preference write did not reach the domain the app reads (see write_dev_default in scripts/lib/e2e-helpers.sh); the other possibility is that a different MeetingTranscriber instance is answering on 127.0.0.1:9876."
 log "app resolved recordOnly=$_RESOLVED_RECORD_ONLY (as configured)"
+if [ "$NO_MIC" = true ]; then
+    _RESOLVED_NO_MIC="$(jq -r '.settings.recording.noMic' <<<"$_SNAP")"
+    [ "$_RESOLVED_NO_MIC" = "true" ] \
+        || fail "the app resolved settings.recording.noMic=$_RESOLVED_NO_MIC, but --no-mic requires true"
+    log "app resolved noMic=true (app-audio-only capture)"
+fi
 
 # Same reasoning one field over: every artifact assertion in this lane is built
 # on `$OUTPUT_DIR`, a literal restatement of a path the app owns and the user
@@ -1584,8 +1677,31 @@ run_one_record_only_meeting() {
     touch "$meeting_marker"
 
     log "$label: starting meeting-simulator (record-only) → $SIMULATOR_FIXTURE"
-    "$SIMULATOR_BIN" "$SIMULATOR_FIXTURE" >/tmp/e2e-app-sim.log 2>&1 &
+    if [ "$SIMULATOR_PLAYBACK_DELAY" -gt 0 ]; then
+        "$SIMULATOR_BIN" "$SIMULATOR_FIXTURE" --playback-delay "$SIMULATOR_PLAYBACK_DELAY" \
+            >/tmp/e2e-app-sim.log 2>&1 &
+    else
+        "$SIMULATOR_BIN" "$SIMULATOR_FIXTURE" >/tmp/e2e-app-sim.log 2>&1 &
+    fi
     SIM_PID=$!
+
+    if [ "$SIMULATOR_PLAYBACK_DELAY" -gt 0 ]; then
+        _recording_started_before_playback() {
+            local current_state
+            current_state="$(rpc /state)"
+            jq -e '.watchState == "recording" and .settings.recording.recordOnly == true' \
+                <<<"$current_state" >/dev/null 2>&1 || return 1
+            if [ "$NO_MIC" = true ]; then
+                jq -e '.settings.recording.noMic == true' <<<"$current_state" >/dev/null 2>&1 || return 1
+            fi
+        }
+        local before_playback_timeout=$((SIMULATOR_PLAYBACK_DELAY - 1))
+        [ "$before_playback_timeout" -ge 1 ] \
+            || fail "$label: --playback-delay must be at least 2 seconds to verify recording before audio"
+        poll_until "$before_playback_timeout" 1 _recording_started_before_playback \
+            || fail "$label: Sawti did not enter record-only capture before the delayed fixture playback"
+        log "$label: Sawti was recording before the first fixture audio"
+    fi
 
     # Block until the simulator finishes playing the fixture. Exit code is
     # irrelevant; we assert on filesystem state below.
@@ -1617,6 +1733,14 @@ run_one_record_only_meeting() {
     [ "$schema_check" = "ok" ] || fail "$label: sidecar schema invalid: $schema_check"
     assert_sidecar_common "$label" "$sidecar"
 
+    if [ "$NO_MIC" = true ]; then
+        local mic_filename
+        mic_filename="$(jq -r '.files.mic // empty' "$sidecar")"
+        [ -z "$mic_filename" ] \
+            || fail "$label: --no-mic was set but the sidecar contains a microphone track ($mic_filename)"
+        log "$label: no microphone track was created (--no-mic verified)"
+    fi
+
     # Mix WAV must live next to the sidecar and be non-trivial.
     local sidecar_dir mix_filename mix_path mix_size
     sidecar_dir="$(dirname "$sidecar")"
@@ -1642,7 +1766,11 @@ run_one_record_only_meeting() {
     # TCC audio-capture grant, or a regressed capture path).
     # `=` form for the negative threshold: ArgumentParser reads a bare `-50` as
     # another flag and errors out.
-    assert_sidecar_track_has_signal "$label" "$sidecar" app "$WAV_VERDICT_FIXTURE_MIN_ACTIVE_S" \
+    local app_active_floor="$WAV_VERDICT_FIXTURE_MIN_ACTIVE_S"
+    if [ "$SIMULATOR_PLAYBACK_DELAY" -gt 0 ] && [ "$IS_DEFAULT_FIXTURE" = true ]; then
+        app_active_floor=36
+    fi
+    assert_sidecar_track_has_signal "$label" "$sidecar" app "$app_active_floor" \
         "System-audio capture produced no usable signal: likely a wrong tap PID set, a missing TCC audio-capture grant, or a regressed capture path."
 
     # Negative: record-only short-circuits before VAD/transcription/protocol.
@@ -1733,7 +1861,7 @@ LAST_RECORDED_MIX_PATH=""
 #
 # Live temps go to AppPaths.recordingsDir (Application Support), NOT the
 # record-only Downloads dir — recovery scans the same path.
-CRASH_RECORDINGS="$HOME/Library/Application Support/MeetingTranscriber/recordings"
+CRASH_RECORDINGS="$SAWTI_RECORDINGS_DIR"
 CRASH_MARKER=""
 CRASH_STEM=""
 run_crash_recovery() {
@@ -1797,7 +1925,7 @@ run_crash_recovery() {
 
     # 6. Relaunch — recovery runs at the launch queue-build.
     log "$label: relaunching $DEV_BUNDLE_DEPLOY"
-    open "$DEV_BUNDLE_DEPLOY"
+    sawti_open_app "$DEV_BUNDLE_DEPLOY"
     poll_until "$RPC_READY_TIMEOUT_S" 1 _rpc_ready || fail "$label: RPC did not come back after relaunch"
     log "$label: RPC back up after relaunch"
 

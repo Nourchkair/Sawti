@@ -53,6 +53,7 @@ final class LiveSpeakerMatcherTests: XCTestCase {
     /// target: someone refactoring the loader path drops the cache
     /// write → every launch pays the full load cost silently.
     func testFirstLaunchDerivesAndCachesFrameCount() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("prepares the real speaker-diarization model")
         let (matcher, cache) = makeMatcher(slug: "derivation")
         try await matcher.prepare()
 
