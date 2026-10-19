@@ -92,7 +92,7 @@ final class AppStateTests: XCTestCase { // swiftlint:disable:this type_body_leng
         )
 
         XCTAssertNotNil(state.pipeline.queue.engine, "an unclean launch must build the queue without waiting for user action")
-        XCTAssertEqual(recoveryPermissions, [true], "a dead previous process makes recent staged audio safe to recover")
+        XCTAssertEqual(recoveryPermissions, [true], "an unclean cold launch selects prompt staged-audio recovery")
     }
 
     private func makeJob(title: String = "Sprint Review") -> PipelineJob {

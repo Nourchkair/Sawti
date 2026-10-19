@@ -691,9 +691,12 @@ side.
 - **Interrupted microphone recordings are recovered on an unclean relaunch.**
   Sawti's process-liveness marker identifies that the prior app process is gone;
   startup then builds the pipeline immediately and allows recovery to bypass
-  the normal 30-second recent-file guard. Recovery requires the recording marker
-  and usable audio to have survived. Ordinary in-session scans keep the age guard
-  so they cannot re-mix a track that may still be written.
+  the normal 30-second recent-file guard. The capture helper receives stdin EOF
+  when its parent exits and is designed to stop/finalize, but a real force-kill
+  recording must still verify that finalization finishes before recovery scans.
+  Recovery also requires the recording marker and usable audio to have survived.
+  Ordinary in-session scans keep the age guard so they cannot re-mix a track
+  that may still be written.
 - **`mt-cli` covers inspection plus watch and record control.** The bundled
   `tools/mt-cli` client wraps the debug endpoints (`state`, `healthz`,
   `screenshot`, `open-settings`, `close-settings`) plus `mt-cli watch` and
