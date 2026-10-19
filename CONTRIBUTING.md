@@ -27,11 +27,11 @@ remain unchanged:
 ./scripts/test-isolated.sh
 ```
 
-The wrapper does not redirect macOS `cfprefsd`: named `UserDefaults` test
-suites still use the real `~/Library/Preferences` directory. Tests must use
-`DefaultsSuite` for scratch domains; its manifest removes only those generated
-suite files after the system preferences service has settled. The real app
-preference domain and personal recordings are not test fixtures.
+macOS `cfprefsd` can ignore a redirected `HOME` for named `UserDefaults`
+domains, so tests must create scratch settings through `DefaultsSuite`. It uses
+a process-local in-memory `UserDefaults` implementation; do not use
+`UserDefaults(suiteName:)` or `.standard` in tests. Production preferences
+remain unchanged.
 
 `ModelPreloadTests` are skipped by default because a cold cache downloads
 several models. To run that network-capable preload explicitly, use
