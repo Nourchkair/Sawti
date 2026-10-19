@@ -688,9 +688,12 @@ side.
   easier to miss over the API, where nobody is looking at the menu bar icon.
   Follow a `stop` with `POST /v1/watch {"action":"start"}` if the app should keep
   watching.
-- **A crash during a microphone recording loses the track.** Recovery on the
-  next launch keys on artefacts an app-audio tap leaves behind, and a
-  microphone-only recording leaves none. Known limitation, not a regression.
+- **Interrupted microphone recordings are recovered on an unclean relaunch.**
+  Sawti's process-liveness marker identifies that the prior app process is gone;
+  startup then builds the pipeline immediately and allows recovery to bypass
+  the normal 30-second recent-file guard. Recovery requires the recording marker
+  and usable audio to have survived. Ordinary in-session scans keep the age guard
+  so they cannot re-mix a track that may still be written.
 - **`mt-cli` covers inspection plus watch and record control.** The bundled
   `tools/mt-cli` client wraps the debug endpoints (`state`, `healthz`,
   `screenshot`, `open-settings`, `close-settings`) plus `mt-cli watch` and

@@ -13,7 +13,9 @@ extension PipelineController.QueueEnvironment {
         Self(
             logDir: nil,
             stagingDir: AppPaths.recordingsDir,
-            recoverStagedRecordings: PipelineController.recoverStagedRecordings(into:),
+            recoverStagedRecordings: { queue, allowRecentFiles in
+                PipelineController.recoverStagedRecordings(into: queue, allowRecentFiles: allowRecentFiles)
+            },
         )
     }
 }
@@ -22,7 +24,7 @@ extension PipelineController {
     /// Fire-and-forget: dir scan + per-file attr probes run off-main so app
     /// startup (and the first call to `enqueueFiles`) isn't blocked by a slow
     /// filesystem. Recovered jobs appear in `queue.jobs` once the scan returns.
-    private static func recoverStagedRecordings(into q: PipelineQueue) {
+    private static func recoverStagedRecordings(into q: PipelineQueue, allowRecentFiles: Bool) {
         Task {
             // Rescue recordings whose writer was killed mid-stream (#379), then
             // hand off to the orphan scan which enqueues the results. Detached
@@ -38,12 +40,18 @@ extension PipelineController {
             // real one, which is exactly what injecting the folder was meant to
             // prevent.
             let staging = q.stagingDir
+            // The 30-second mtime guard protects a writer that may still be
+            // active when recovery is triggered by a normal watch-start. After
+            // AppLauncher has positively identified the previous process as
+            // dead, those tracks cannot still be written by it, so an immediate
+            // relaunch can safely recover them without waiting for the guard.
+            let minAge: TimeInterval = allowRecentFiles ? 0 : 30
             await Task.detached(priority: .utility) {
-                let repaired = WavHeaderRepair.repairUnfinalized(in: staging)
+                let repaired = WavHeaderRepair.repairUnfinalized(in: staging, minAge: minAge)
                 if repaired > 0 { logger.info("Repaired \(repaired) unfinalized recording(s) on launch") }
-                let recovered = DualSourceRecorder.recoverCrashedRecordings(in: staging)
+                let recovered = DualSourceRecorder.recoverCrashedRecordings(in: staging, minAge: minAge)
                 if recovered > 0 { logger.info("Recovered \(recovered) crashed recording(s) on launch") }
-                DualSourceRecorder.cleanupTempFiles(recordingsDir: staging)
+                DualSourceRecorder.cleanupTempFiles(recordingsDir: staging, minAge: minAge)
             }.value
             await q.recoverOrphanedRecordings()
         }

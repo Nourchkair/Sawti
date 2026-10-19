@@ -215,6 +215,7 @@ final class AppState {
         notifier: any AppNotifying = SilentNotifier(),
         updateChecker: UpdateChecker? = nil,
         pipelineEnvironment: PipelineController.QueueEnvironment = .production,
+        previousExit: PreviousExit = .clean,
     ) {
         // Dependency defaults are resolved through explicitly-typed factory
         // helpers (above) rather than inline `?? SomeType()` expressions (and an
@@ -277,6 +278,14 @@ final class AppState {
         )
         pipeline.activate { [weak self] in self?.engines.activeTranscriptionEngine }
         watching.activate { [weak self] in self?.engines.syncEngineSettings() }
+
+        // A dead-process marker is definitive proof that the previous capture
+        // writer cannot still be appending. Build the queue at launch in that
+        // case so interrupted recordings are repaired, re-mixed, and surfaced
+        // as jobs without waiting for the next manual recording or import.
+        if case .unclean = previousExit {
+            pipeline.ensureQueue(allowRecentStagedRecordings: true)
+        }
 
         #if !APPSTORE
             applyForcedChannelFlagsFromEnvironment()

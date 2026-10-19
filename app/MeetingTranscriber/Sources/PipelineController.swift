@@ -57,7 +57,7 @@ final class PipelineController {
         var securityScope: SecurityScopeAccess = .live
         /// Rescues crashed recordings from the staging folder and enqueues
         /// orphans into the queue it is handed; nil skips it.
-        var recoverStagedRecordings: (@MainActor (PipelineQueue) -> Void)?
+        var recoverStagedRecordings: (@MainActor (PipelineQueue, Bool) -> Void)?
 
         var resolveOutputDir: @MainActor (OutputDirectoryResolver) -> URL = { $0.resolve() }
         /// The queue the controller starts with; nil builds a bare one on this
@@ -148,7 +148,10 @@ final class PipelineController {
     ///
     /// `recoversStagedRecordings: false` skips the staging-folder recovery; the
     /// reason is at its one caller, `rebuildIfOutputFolderChanged()`.
-    func rebuild(recoversStagedRecordings: Bool = true) {
+    func rebuild(
+        recoversStagedRecordings: Bool = true,
+        allowRecentStagedRecordings: Bool = false,
+    ) {
         guard canReplaceQueue else {
             logger.info("Skipping queue rebuild: a job is unfinished or awaiting speaker naming")
             return
@@ -169,7 +172,9 @@ final class PipelineController {
         } else {
             built.loadSnapshot()
         }
-        if recoversStagedRecordings { queueEnvironment.recoverStagedRecordings?(built) }
+        if recoversStagedRecordings {
+            queueEnvironment.recoverStagedRecordings?(built, allowRecentStagedRecordings)
+        }
         built.refreshKnownSpeakerNames()
         queue = built
         // Recorded only after an install, so a queue built for inspection and
@@ -256,9 +261,9 @@ final class PipelineController {
     /// Rebuild only when the queue isn't already wired to an engine. The
     /// manual-recording + file-enqueue paths call this so an already-configured
     /// queue (e.g. one a test injected) isn't replaced.
-    func ensureQueue() {
+    func ensureQueue(allowRecentStagedRecordings: Bool = false) {
         guard queue.engine == nil else { return }
-        rebuild()
+        rebuild(allowRecentStagedRecordings: allowRecentStagedRecordings)
     }
 
     /// A `PipelineQueue` wired to the active engine, the diarization and
