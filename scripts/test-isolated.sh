@@ -74,6 +74,12 @@ PY
 
 snapshot_real_user_paths > "$guard_dir/before.json"
 
+test_args=("$@")
+if [[ "${SAWTI_RUN_MODEL_PRELOAD_TESTS:-0}" != "1" ]]; then
+    # These tests download ASR/VAD models from Hugging Face on a cold cache.
+    test_args+=(--skip ModelPreloadTests)
+fi
+
 test_status=0
 (
     cd "$package_dir"
@@ -82,7 +88,7 @@ test_status=0
         CFFIXED_USER_HOME="$test_home" \
         SAWTI_TEST_HOME="$test_home" \
         FFMPEG_BINARY="" \
-        swift test --parallel "$@"
+        swift test --parallel "${test_args[@]}"
 ) || test_status=$?
 
 snapshot_real_user_paths > "$guard_dir/after.json"

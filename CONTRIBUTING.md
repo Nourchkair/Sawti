@@ -33,6 +33,17 @@ suites still use the real `~/Library/Preferences` directory. Tests must use
 suite files after the system preferences service has settled. The real app
 preference domain and personal recordings are not test fixtures.
 
+`ModelPreloadTests` are skipped by default because a cold cache downloads
+several models. To run that network-capable preload explicitly, use
+`SAWTI_RUN_MODEL_PRELOAD_TESTS=1 ./scripts/test-isolated.sh --filter ModelPreloadTests`.
+Model-backed tests that use a real local model stay skipped in isolated runs
+unless `E2E_ENABLED=1` is set; an explicit run may fetch models if its cache is
+cold. CI continues to run its model-backed coverage against its pre-warmed
+cache. The production WhisperKit cache-layout probe is gated the same way
+because it inspects the local model cache.
+Keychain operations through `KeychainHelper` use a process-local store in
+XCTest, so routine tests never read or write the developer's login Keychain.
+
 ## Development workflow
 
 ### Branching

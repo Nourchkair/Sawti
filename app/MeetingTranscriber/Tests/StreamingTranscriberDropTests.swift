@@ -16,7 +16,8 @@ import XCTest
 /// 3-core macos-26 runner. See
 /// `feedback_coreml_e5rt_cache_race_under_parallel_xctest`.
 final class StreamingTranscriberDropTests: XCTestCase {
-    func testDropContract() async {
+    func testDropContract() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("the empty-buffer case initializes the Silero VAD model")
         let observer = OnEventObserver()
         let transcriber = makeTranscriber(observer: observer)
 

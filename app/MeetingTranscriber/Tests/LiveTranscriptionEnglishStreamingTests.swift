@@ -227,6 +227,7 @@ final class LiveTranscriptionEnglishStreamingTests: XCTestCase {
     /// rebuilt). Refresh is proven functionally: a buffer fed after the reset
     /// still finalizes through the live re-transcribe pipeline.
     func testFallbackThenResetRefreshesReTranscribeAndDoesNotRetryEou() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("fallback ingestion requires the Silero VAD model")
         let probe = EouFactoryProbe(loadError: LoadFailure())
         let engine = MockStreamingEngine()
         engine.samplesToTranscribe = "fallback utterance"

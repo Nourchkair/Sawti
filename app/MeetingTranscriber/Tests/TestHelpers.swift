@@ -110,12 +110,20 @@ func loadFixtureAs16kMono(_ url: URL) async throws -> [Float] {
 
 // MARK: - E2E Opt-In Gate
 
-/// Skip in CI unless the dedicated `e2e.yml` workflow opted in via `E2E_ENABLED=1`.
+/// Skip in CI and isolated local test runs unless the dedicated `e2e.yml`
+/// workflow or developer opted in via `E2E_ENABLED=1`.
 /// Free function so the gate is unit-testable without an XCTestCase context.
 func shouldSkipForE2EGate(env: [String: String]) -> Bool {
     let isCI = env["CI"] != nil
+    let isIsolatedRun = env["SAWTI_TEST_HOME"] != nil
     let optedIn = env["E2E_ENABLED"] == "1"
-    return isCI && !optedIn
+    return (isCI || isIsolatedRun) && !optedIn
+}
+
+/// Skip tests that need a real local model only in the disposable-home wrapper.
+/// CI model tests retain their existing coverage from the pre-warmed model cache.
+func shouldSkipForIsolatedModelRun(env: [String: String]) -> Bool {
+    env["SAWTI_TEST_HOME"] != nil && env["E2E_ENABLED"] != "1"
 }
 
 extension XCTestCase {
@@ -146,7 +154,14 @@ extension XCTestCase {
     func skipIfCIWithoutE2EOptIn(_ reason: String) throws {
         try XCTSkipIf(
             shouldSkipForE2EGate(env: ProcessInfo.processInfo.environment),
-            "Skipping in CI: \(reason)",
+            "Skipping gated test: \(reason)",
+        )
+    }
+
+    func skipIfIsolatedModelRunWithoutOptIn(_ reason: String) throws {
+        try XCTSkipIf(
+            shouldSkipForIsolatedModelRun(env: ProcessInfo.processInfo.environment),
+            "Skipping isolated test: \(reason)",
         )
     }
 }

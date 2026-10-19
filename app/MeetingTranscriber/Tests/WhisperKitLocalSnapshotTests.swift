@@ -123,6 +123,7 @@ final class WhisperKitLocalSnapshotTests: XCTestCase {
     /// cover.
     @MainActor
     func testProductionLocatesARealFetchedModel() throws {
+        try skipIfIsolatedModelRunWithoutOptIn("inspects the locally downloaded WhisperKit model cache")
         let fileManager = FileManager.default
         // `<download base>/models`, reached without going through our own repoID.
         let modelsRoot = WhisperKitLocalSnapshot.defaultRepoRoot

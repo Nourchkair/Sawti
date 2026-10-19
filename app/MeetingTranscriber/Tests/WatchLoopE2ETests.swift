@@ -203,6 +203,7 @@ final class WatchLoopE2ETests: XCTestCase { // swiftlint:disable:this balanced_x
     // MARK: - 3. Empty Transcript Transitions to Error
 
     func testEmptyTranscriptTransitionsToError() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("transcribes through WhisperKit and requires its local model")
         // Create a silent (all zeros) 48kHz WAV — WhisperKit should produce empty transcript
         let silentSamples = [Float](repeating: 0.0, count: 48000)
         let mixPath = tmpDir.appendingPathComponent("silent.wav")

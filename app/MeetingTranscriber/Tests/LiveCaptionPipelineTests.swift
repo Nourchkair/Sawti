@@ -30,6 +30,7 @@ final class LiveCaptionPipelineTests: XCTestCase {
     /// Actor-level: `StreamingTranscriber.flush()` commits the pending utterance
     /// (positive) and respects the sub-1 s noise guard (negative).
     func testFlushCommitsPendingUtteranceContract() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("requires the Silero VAD model")
         let samples = try await loadSpeechFixture()
 
         // (1) Positive: feed ~1.3 s of speech-active prefix (5 chunks). The
@@ -84,6 +85,7 @@ final class LiveCaptionPipelineTests: XCTestCase {
     /// mid-utterance, no `speechEnd`) never finalises, so `recentFinals` stays
     /// empty — the assertion only passes because flush commits it.
     func testControllerFlushDeliversPendingFinalToCaptions() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("requires the Silero VAD model")
         let samples = try await loadSpeechFixture()
         let captions = LiveCaptionsState()
         let engine = MockStreamingEngine()
@@ -129,6 +131,7 @@ final class LiveCaptionPipelineTests: XCTestCase {
     /// that `flush()` commits *nothing more* once the buffer was already drained
     /// by a real `speechEnd` — no phantom duplicate of the last utterance.
     func testFlushAfterNaturalSpeechEndEmitsNoSecondFinal() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("requires the Silero VAD model")
         let samples = try await loadSpeechFixture()
         // chunks 0…33 — through the fixture's first natural speechEnd (chunk 33).
         let throughEnd = Array(samples.prefix(Self.chunkSize * 34))
@@ -155,6 +158,7 @@ final class LiveCaptionPipelineTests: XCTestCase {
     /// buffer, so a second flush finds nothing to commit. Guards against a
     /// regression where the buffer isn't reset and the tail is emitted twice.
     func testFlushIsIdempotent() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("requires the Silero VAD model")
         let samples = try await loadSpeechFixture()
         // 5-chunk speech-active prefix (~1.3 s > 1 s minFinalSamples), no
         // speechEnd yet → speech stays buffered until flush commits it.
@@ -182,6 +186,7 @@ final class LiveCaptionPipelineTests: XCTestCase {
     /// Pins the `async let` symmetry in `LiveTranscriptionController.flush()` —
     /// a regression that only flushed the mic pipeline would leave this empty.
     func testControllerFlushDeliversPendingAppChannelFinal() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("requires the Silero VAD model")
         let samples = try await loadSpeechFixture()
         let captions = LiveCaptionsState()
         let engine = MockStreamingEngine()
