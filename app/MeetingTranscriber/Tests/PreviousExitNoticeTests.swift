@@ -51,6 +51,6 @@ final class PreviousExitNoticeTests: XCTestCase {
 
     /// The title is what the user could not see for themselves.
     func testTheTitleSaysTheAppWasNotRunning() {
-        XCTAssertEqual(PreviousExitNotice.title, "Meeting Transcriber was not running")
+        XCTAssertEqual(PreviousExitNotice.title, "Sawti was not running")
     }
 }

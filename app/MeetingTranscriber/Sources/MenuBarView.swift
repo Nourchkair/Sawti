@@ -20,6 +20,7 @@ struct MenuBarView: View {
     let onStopManualRecording: (() -> Void)?
     let onOpenLastProtocol: () -> Void
     let onOpenProtocol: (URL) -> Void
+    var onViewTranscript: ((URL) -> Void)? = nil
     let onOpenProtocolsFolder: () -> Void
     let onOpenSettings: () -> Void
     let onNameSpeakers: (() -> Void)?
@@ -253,6 +254,28 @@ struct MenuBarView: View {
             if job.state == .done, let path = job.protocolPath ?? job.transcriptPath {
                 Button("Open") { onOpenProtocol(path) }
                     .font(.caption2)
+            }
+            if let transcriptPath = job.transcriptPath {
+                Button("View") {
+                    if let onViewTranscript {
+                        onViewTranscript(transcriptPath)
+                    } else {
+                        onOpenProtocol(transcriptPath)
+                    }
+                }
+                .font(.caption2)
+                .help("Read and export the complete transcript")
+            }
+            if let originalPath = job.rawTranscriptPath {
+                Button("Original") {
+                    if let onViewTranscript {
+                        onViewTranscript(originalPath)
+                    } else {
+                        onOpenProtocol(originalPath)
+                    }
+                }
+                .font(.caption2)
+                .help("View the original ASR output before normalization and speaker labels")
             }
             if job.state == .speakerNamingPending {
                 Button("Name Speakers") { onNameSpeakers?() }

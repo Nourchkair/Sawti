@@ -151,14 +151,14 @@ extension ChannelHealthController {
 
         case (.app, .digitalSilence, false):
             "The app-audio channel has delivered only silence since this recording started, "
-                + "while the microphone carries audio. Check that Meeting Transcriber is enabled "
+                + "while the microphone carries audio. Check that Sawti is enabled "
                 + "under \(SystemSettingsPaths.screenRecording), and whether a third-party audio "
                 + "tool (SoundSource, Audio Hijack, Loopback, Krisp) is intercepting the meeting "
                 + "app's audio."
 
         case (.mic, .noBuffers, _):
             "The microphone is delivering no audio to this recording. "
-                + "Check that the input device is still connected, and that Meeting Transcriber "
+                + "Check that the input device is still connected, and that Sawti "
                 + "still has permission to use the microphone."
 
         // The microphone has no watchdog; if it ever reports this, it is
@@ -174,7 +174,7 @@ extension ChannelHealthController {
         let track = channel == .mic ? "Microphone" : "App-audio"
         return "\(track) capture could not recover after an audio device change and has stopped "
             + "for this recording. The rest of the recording continues. "
-            + "Restart Meeting Transcriber to bring the channel back, and to release the extra CPU "
+            + "Restart Sawti to bring the channel back, and to release the extra CPU "
             + "a stuck restart attempt may still be holding."
     }
 

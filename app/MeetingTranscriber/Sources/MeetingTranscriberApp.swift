@@ -125,6 +125,7 @@ struct MeetingTranscriberApp: App {
         speakerNamingWindow
         settingsWindow
         recordAppWindow
+        transcriptWindow
     }
 
     // MARK: - Menu Bar
@@ -145,6 +146,10 @@ struct MeetingTranscriberApp: App {
             } : nil,
             onOpenLastProtocol: openLastProtocol,
             onOpenProtocol: { url in NSWorkspace.shared.open(url) },
+            onViewTranscript: { url in
+                openWindow(id: "transcript", value: url)
+                NSApp.activate(ignoringOtherApps: true)
+            },
             onOpenProtocolsFolder: openProtocolsFolder,
             onOpenSettings: {
                 bringWindowToFront(id: "settings")
@@ -293,6 +298,13 @@ struct MeetingTranscriberApp: App {
             )
         }
         .windowResizability(.contentSize)
+    }
+
+    private var transcriptWindow: some Scene {
+        WindowGroup("Transcript", id: "transcript", for: URL.self) { $fileURL in
+            TranscriptViewerWindow(fileURL: fileURL)
+        }
+        .defaultSize(width: 840, height: 680)
     }
 
     // MARK: - Speaker Naming Window

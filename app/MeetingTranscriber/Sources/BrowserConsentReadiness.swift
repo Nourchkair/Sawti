@@ -90,12 +90,12 @@ enum BrowserConsentReadiness: Equatable {
             nil
 
         case .denied:
-            "Notifications are turned off for Meeting Transcriber, so the "
+            "Notifications are turned off for Sawti, so the "
                 + "\"record this meeting?\" prompt cannot appear and browser meetings "
                 + "will never be recorded. Allow notifications in System Settings."
 
         case .undetermined:
-            "Meeting Transcriber has not been allowed to send notifications yet. "
+            "Sawti has not been allowed to send notifications yet. "
                 + "Until it is, the \"record this meeting?\" prompt cannot appear and "
                 + "browser meetings will never be recorded."
 
@@ -111,7 +111,7 @@ enum BrowserConsentReadiness: Equatable {
                 + "Banners or Alerts in System Settings."
 
         case .timeSensitiveOff:
-            "Time Sensitive notifications are turned off for Meeting Transcriber, so the "
+            "Time Sensitive notifications are turned off for Sawti, so the "
                 + "\"record this meeting?\" prompt is hidden while a Focus mode or Do Not "
                 + "Disturb is on. Browser meetings started during Focus will not be "
                 + "recorded. Allow Time Sensitive notifications in System Settings."

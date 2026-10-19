@@ -41,6 +41,8 @@ cd app/MeetingTranscriber
 
 echo "==> swift build -c release (Homebrew variant)"
 swift build -c release
+echo "==> swift build --product SawtiCaptureHelper"
+swift build -c release --product SawtiCaptureHelper
 
 if [[ "$WITH_APPSTORE" == 1 ]]; then
     echo "==> swift build -c release -DAPPSTORE (App Store variant)"

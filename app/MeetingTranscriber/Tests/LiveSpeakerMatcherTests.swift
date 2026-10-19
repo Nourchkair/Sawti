@@ -80,6 +80,7 @@ final class LiveSpeakerMatcherTests: XCTestCase {
     /// segmentation load) is verified by inspection of the loader code
     /// path, not directly testable without instrumenting `ModelHub`.
     func testSecondLaunchUsesCachedFrameCount() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("prepares the real speaker-diarization model")
         let seeded = 589
         let (matcher, cache) = makeMatcher(slug: "hit", prepopulate: seeded)
         try await matcher.prepare()

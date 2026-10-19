@@ -76,10 +76,15 @@ final class PipelineQueueRetryTests: XCTestCase {
     }
 
     /// Runs one job to `.error` through the real pipeline and returns its ID.
-    private func failOneJob(on queue: PipelineQueue, mixPath: URL) async throws -> UUID {
+    private func failOneJob(
+        on queue: PipelineQueue,
+        mixPath: URL,
+        saveRawTranscriptSeparately: Bool? = nil,
+    ) async throws -> UUID {
         let job = PipelineJob(
             meetingTitle: "Failed Call", appName: "Teams",
             mixPath: mixPath, appPath: nil, micPath: nil, micDelay: 0,
+            saveRawTranscriptSeparately: saveRawTranscriptSeparately,
         )
         queue.enqueue(job)
         await queue.awaitProcessing()
@@ -195,21 +200,28 @@ final class PipelineQueueRetryTests: XCTestCase {
 
     /// Diarization parks the naming state (the in-memory data that makes stage
     /// 3 skip the protocol and wait for the dialog, the sidecar JSON, the
-    /// diarizer mode) before stage 3 writes the transcript, and that write can
-    /// throw. A retry that produces no naming state of its own, here because
+    /// diarizer mode) before stage 3 writes the transcript. A retry that
+    /// produces no naming state of its own, here because
     /// the diarizer is unavailable this time, used to find the failed run's
     /// state still there, skip the protocol and park in the naming dialog with
     /// the old mapping.
     func testARetryDoesNotParkOnTheFailedRunsSpeakerNaming() async throws {
         let outputDir = tmpDir.appendingPathComponent("out")
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        // A file where the protocols folder belongs makes saving the transcript
-        // throw, after diarization has already parked its naming state.
-        let blocker = outputDir.appendingPathComponent("protocols")
-        try Data().write(to: blocker)
+        let protocolsDir = outputDir.appendingPathComponent("protocols")
+        try FileManager.default.createDirectory(at: protocolsDir, withIntermediateDirectories: true)
         let engine = MockEngine()
         engine.segmentsToReturn = [TimestampedSegment(start: 0, end: 5, text: "Hello there")]
         let diarization = MockDiarization()
+        diarization.afterRun = {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: protocolsDir.path)) ?? []
+            guard let original = names.first(where: { $0.hasSuffix("_original.txt") }) else { return }
+            let slug = String(original.dropLast("_original.txt".count))
+            try? FileManager.default.createDirectory(
+                at: protocolsDir.appendingPathComponent("\(slug).txt", isDirectory: true),
+                withIntermediateDirectories: true,
+            )
+        }
         diarization.resultToReturn = DiarizationResult(
             segments: [.init(start: 0, end: 5, speaker: "SPEAKER_0")],
             speakingTimes: ["SPEAKER_0": 5],
@@ -222,6 +234,8 @@ final class PipelineQueueRetryTests: XCTestCase {
         )
         let jobID = try await failOneJob(on: queue, mixPath: createTestAudioFile(in: tmpDir))
         let failed = try XCTUnwrap(queue.jobs.first { $0.id == jobID })
+        let blocker = protocolsDir.appendingPathComponent("\(try XCTUnwrap(failed.namingSlug)).txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: blocker.path), "test premise: final transcript path was blocked")
         let store = SpeakerNamingStore(outputDir: outputDir)
         XCTAssertNotNil(queue.speakerNamingDataByJob[jobID], "test premise: the failed run parked naming data")
         XCTAssertTrue(store.hasNamingData(slug: failed.namingSlug), "test premise: the failed run wrote its sidecar")
@@ -393,9 +407,18 @@ final class PipelineQueueRetryTests: XCTestCase {
     func testARetryRemovesNamingDataFromTheFolderItWasWrittenTo() async throws {
         let firstDir = tmpDir.appendingPathComponent("first_out")
         try FileManager.default.createDirectory(at: firstDir, withIntermediateDirectories: true)
-        // Saving the transcript throws after diarization wrote its naming data.
-        try Data().write(to: firstDir.appendingPathComponent("protocols"))
+        let protocolsDir = firstDir.appendingPathComponent("protocols")
+        try FileManager.default.createDirectory(at: protocolsDir, withIntermediateDirectories: true)
         let diarization = MockDiarization()
+        diarization.afterRun = {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: protocolsDir.path)) ?? []
+            guard let original = names.first(where: { $0.hasSuffix("_original.txt") }) else { return }
+            let slug = String(original.dropLast("_original.txt".count))
+            try? FileManager.default.createDirectory(
+                at: protocolsDir.appendingPathComponent("\(slug).txt", isDirectory: true),
+                withIntermediateDirectories: true,
+            )
+        }
         diarization.resultToReturn = DiarizationResult(
             segments: [.init(start: 0, end: 5, speaker: "SPEAKER_0")],
             speakingTimes: ["SPEAKER_0": 5],
@@ -405,17 +428,29 @@ final class PipelineQueueRetryTests: XCTestCase {
         let engine = MockEngine()
         engine.segmentsToReturn = [TimestampedSegment(start: 0, end: 5, text: "Hello there")]
         let firstQueue = makeQueue(engine: engine, diarization: diarization, outputDir: firstDir)
-        let jobID = try await failOneJob(on: firstQueue, mixPath: createTestAudioFile(in: tmpDir))
-        let slug = try XCTUnwrap(firstQueue.jobs.first { $0.id == jobID }?.namingSlug)
+        let jobID = try await failOneJob(
+            on: firstQueue,
+            mixPath: createTestAudioFile(in: tmpDir),
+            saveRawTranscriptSeparately: false,
+        )
+        let firstRunJob = try XCTUnwrap(firstQueue.jobs.first { $0.id == jobID })
+        let slug = try XCTUnwrap(firstRunJob.namingSlug)
+        let firstOriginalPath = try XCTUnwrap(firstRunJob.rawTranscriptPath)
+        let blocker = protocolsDir.appendingPathComponent("\(slug).txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: blocker.path), "test premise: final transcript path was blocked")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: firstOriginalPath.path))
         XCTAssertTrue(
             SpeakerNamingStore(outputDir: firstDir).hasNamingData(slug: slug),
             "test premise: the failed run wrote naming data",
         )
         await firstQueue.awaitSnapshotFlush()
+        try FileManager.default.removeItem(at: blocker)
 
         let secondDir = tmpDir.appendingPathComponent("second_out")
         try FileManager.default.createDirectory(at: secondDir, withIntermediateDirectories: true)
-        let rebuilt = makeQueue(engine: makeFailingEngine(), outputDir: secondDir)
+        let rebuiltEngine = MockEngine()
+        rebuiltEngine.segmentsToReturn = [TimestampedSegment(start: 0, end: 5, text: "Recovered words")]
+        let rebuilt = makeQueue(engine: rebuiltEngine, outputDir: secondDir)
         rebuilt.loadSnapshot()
         XCTAssertTrue(rebuilt.retryJob(id: jobID))
         await rebuilt.awaitProcessing()
@@ -423,6 +458,15 @@ final class PipelineQueueRetryTests: XCTestCase {
         XCTAssertFalse(
             SpeakerNamingStore(outputDir: firstDir).hasNamingData(slug: slug),
             "the failed run's naming data stayed in the folder it was written to",
+        )
+        XCTAssertEqual(rebuilt.jobs.first { $0.id == jobID }?.state, .done)
+        XCTAssertNil(rebuilt.jobs.first { $0.id == jobID }?.rawTranscriptPath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstOriginalPath.path))
+        let secondProtocols = secondDir.appendingPathComponent("protocols")
+        XCTAssertFalse(
+            try FileManager.default.contentsOfDirectory(atPath: secondProtocols.path)
+                .contains { $0.hasSuffix("_original.txt") },
+            "the opt-out left the retry's original transcript in the new folder",
         )
     }
 }

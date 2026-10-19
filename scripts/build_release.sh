@@ -84,9 +84,17 @@ SWIFT_BUILD_FLAGS=(-c release --disable-sandbox)
 if [ "$APPSTORE" = true ]; then
     SWIFT_BUILD_FLAGS+=(-Xswiftc -DAPPSTORE)
 fi
-(cd "$SPM_DIR" && swift build "${SWIFT_BUILD_FLAGS[@]}")
+(cd "$SPM_DIR" && swift build "${SWIFT_BUILD_FLAGS[@]}" --product MeetingTranscriber)
+(cd "$SPM_DIR" && swift build "${SWIFT_BUILD_FLAGS[@]}" --product SawtiCaptureHelper)
 
 cp "$SPM_DIR/.build/release/MeetingTranscriber" "$MACOS_DIR/MeetingTranscriber"
+HELPER_BUILD_BINARY="$SPM_DIR/.build/release/SawtiCaptureHelper"
+if [ ! -x "$HELPER_BUILD_BINARY" ]; then
+    echo "ERROR: SwiftPM did not build SawtiCaptureHelper" >&2
+    exit 1
+fi
+mkdir -p "$CONTENTS/Helpers"
+cp "$HELPER_BUILD_BINARY" "$CONTENTS/Helpers/SawtiCaptureHelper"
 
 # ── Step 2: Assemble app bundle ──────────────────────────────────────────────
 
@@ -181,6 +189,10 @@ if [ "$NOTARIZE" = true ]; then
     source "$SCRIPT_DIR/lib/bundle-ids.sh"
     prepare_signing "$APP_BUNDLE" "$ENTITLEMENTS" "$RELEASE_BUNDLE_ID" "$DEVELOPER_ID"
 
+    codesign --force --sign "$SIGNING_IDENTITY" --identifier "$RELEASE_BUNDLE_ID" \
+        --options runtime --timestamp --entitlements "$ENTITLEMENTS" \
+        "$CONTENTS/Helpers/SawtiCaptureHelper"
+
     # Sign the main app binary with entitlements. The identity comes from
     # prepare_signing: when a profile is embedded it must be one the profile
     # authorises, or macOS refuses to launch the app.
@@ -217,7 +229,13 @@ if [ "$NOTARIZE" = true ]; then
 else
     # Use local development certificate if available (extract 40-char hex SHA-1 hash)
     SIGN_HASH=$(detect_sign_hash)
+    if [ -n "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
+        SIGN_HASH="$SAWTI_DEV_SIGNING_IDENTITY"
+    fi
     if [ -n "$SIGN_HASH" ]; then
+        codesign --force --sign "$SIGN_HASH" --identifier "$RELEASE_BUNDLE_ID" \
+            --entitlements "$ENTITLEMENTS" \
+            "$CONTENTS/Helpers/SawtiCaptureHelper"
         codesign --deep --force --sign "$SIGN_HASH" --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
         echo "  Signed with certificate: $SIGN_HASH"
     else

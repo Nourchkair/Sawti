@@ -10,7 +10,7 @@ import Foundation
 /// without being watched. It does not say "crashed", because a Force Quit or
 /// a power cut leave the same trace and the user may know better.
 struct PreviousExitNotice: Equatable {
-    static let title = "Meeting Transcriber was not running"
+    static let title = "Sawti was not running"
 
     let body: String
 

@@ -917,6 +917,28 @@ final class MenuBarViewTests: XCTestCase {
         XCTAssertThrowsError(try body.find(button: "Open"))
     }
 
+    func testSavedTranscriptsRemainViewableWhenJobHasAnError() throws {
+        let queue = makeIsolatedPipelineQueue()
+        var job = PipelineJob(
+            meetingTitle: "Class recording",
+            appName: "Microphone",
+            mixPath: URL(fileURLWithPath: "/tmp/mix.wav"),
+            appPath: nil,
+            micPath: nil,
+            micDelay: 0,
+        )
+        job.state = .error
+        job.error = "Diarization failed"
+        job.transcriptPath = URL(fileURLWithPath: "/tmp/class.txt")
+        job.rawTranscriptPath = URL(fileURLWithPath: "/tmp/class_original.txt")
+        queue.insertJobForTesting(job)
+
+        let body = try makeView(status: makeStatus(), pipelineQueue: queue).inspect()
+
+        XCTAssertNoThrow(try body.find(button: "View"))
+        XCTAssertNoThrow(try body.find(button: "Original"))
+    }
+
     // MARK: - All state labels shown
 
     func testAllTranscriberStateLabelsRendered() throws {

@@ -1637,22 +1637,20 @@ final class PipelineQueueTests: XCTestCase {
         )
     }
 
-    /// The transcript reaches disk before the diarization stage begins, rather
-    /// than only after it. Asked at the moment the diarizer is built, which is
-    /// that stage's first act: nothing later in it touches this directory, so
-    /// present at entry means present throughout.
+    /// The immutable original transcript reaches disk before diarization
+    /// begins, so a diarizer crash cannot erase the engine's words.
     func testTheTranscriptIsOnDiskBeforeDiarizationBegins() async throws {
         let engine = MockEngine()
         engine.segmentsToReturn = [TimestampedSegment(start: 0, end: 5, text: "Readable early")]
         let protocolsDir = tmpDir.appendingPathComponent("protocols")
 
-        var draftsAtDiarizationEntry: [String] = []
+        var originalsAtDiarizationEntry: [String] = []
         let queue = PipelineQueue(
             engine: engine,
             diarizationFactory: {
                 let names = (try? FileManager.default
                     .contentsOfDirectory(atPath: protocolsDir.path)) ?? []
-                draftsAtDiarizationEntry = names.compactMap { name in
+                originalsAtDiarizationEntry = names.compactMap { name in
                     try? String(contentsOf: protocolsDir.appendingPathComponent(name), encoding: .utf8)
                 }
                 return MockDiarization()
@@ -1674,19 +1672,17 @@ final class PipelineQueueTests: XCTestCase {
         queue.insertJobForTesting(job)
         await queue.processNext()
 
-        // Reading the content, not just the name: an implementation writing an
-        // empty or placeholder file would satisfy a presence check and save
-        // nothing.
+        // Reading the content, not just the name: a placeholder would save
+        // nothing useful for recovery.
         XCTAssertTrue(
-            draftsAtDiarizationEntry.contains { $0.contains("Readable early") },
-            "the spoken text was not on disk when diarization began: \(draftsAtDiarizationEntry)",
+            originalsAtDiarizationEntry.contains { $0.contains("Readable early") },
+            "the original ASR words were not on disk when diarization began: \(originalsAtDiarizationEntry)",
         )
     }
 
-    /// The early write puts the unlabelled transcript on disk. Stage 3 has to
-    /// replace it with the labelled one, or the change would trade a readable
-    /// intermediate for a permanently worse result.
-    func testTheFinishedTranscriptIsTheLabelledOneNotTheEarlyDraft() async throws {
+    /// The final working transcript is speaker-labeled while the separately
+    /// saved original remains unmodified.
+    func testTheFinishedTranscriptIsLabelledAndTheOriginalIsPreserved() async throws {
         let engine = MockEngine()
         engine.segmentsToReturn = [
             TimestampedSegment(start: 0, end: 5, text: "First line"),
@@ -1704,18 +1700,17 @@ final class PipelineQueueTests: XCTestCase {
         queue.insertJobForTesting(job)
         await queue.processNext()
 
-        let protocolsDir = tmpDir.appendingPathComponent("protocols")
-        let transcripts = try FileManager.default
-            .contentsOfDirectory(atPath: protocolsDir.path)
-            .filter { $0.hasSuffix(".txt") }
-        XCTAssertEqual(transcripts.count, 1, "the early draft was left behind as a second file")
-        let saved = try String(contentsOf: protocolsDir.appendingPathComponent(transcripts[0]), encoding: .utf8)
+        let completed = try XCTUnwrap(queue.jobs.first { $0.id == job.id })
+        let saved = try String(contentsOf: XCTUnwrap(completed.transcriptPath), encoding: .utf8)
+        let original = try String(contentsOf: XCTUnwrap(completed.rawTranscriptPath), encoding: .utf8)
         // The label is the mock diarizer's; what matters is that some label is
         // there at all, since the early draft carries none.
         XCTAssertTrue(
             saved.contains("SPEAKER_"),
-            "the file kept the unlabelled draft instead of the diarized transcript: \(saved)",
+            "the final file kept the unlabelled text instead of the diarized transcript: \(saved)",
         )
+        XCTAssertFalse(original.contains("SPEAKER_"))
+        XCTAssertTrue(original.contains("First line"))
         XCTAssertFalse(saved.isEmpty)
     }
 

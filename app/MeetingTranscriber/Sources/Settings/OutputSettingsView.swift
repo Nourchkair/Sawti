@@ -80,7 +80,7 @@ struct OutputSettingsView: View {
             Section("Protocol Generation") {
                 Toggle("Include full transcript in protocol", isOn: $settings.includeFullTranscriptInProtocol)
                     .accessibilityIdentifier(A11yID.includeFullTranscriptToggle)
-                Toggle("Save raw transcript separately", isOn: $settings.saveRawTranscriptSeparately)
+                    Toggle("Keep original transcript separately", isOn: $settings.saveRawTranscriptSeparately)
                     .accessibilityIdentifier(A11yID.saveRawTranscriptToggle)
 
                 Picker("LLM Provider", selection: $settings.protocolProvider) {

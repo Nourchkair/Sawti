@@ -122,6 +122,9 @@ struct PipelineJob: Identifiable, Codable {
     /// Nil for single-source jobs and whenever no verdict was possible.
     var echo: EchoDetectionDTO?
     var transcriptPath: URL?
+    /// The immutable model output before terminology normalization and speaker labeling.
+    /// Optional so snapshots written before Sawti Alpha continue to decode.
+    var rawTranscriptPath: URL?
     var protocolPath: URL?
     var namingSlug: String?
     // Output policy captured when this job enters the queue. Optional so
@@ -174,8 +177,9 @@ struct PipelineJob: Identifiable, Codable {
     /// Folders an earlier write recorded and that may still hold this job's
     /// sidecars, oldest first. Cleanup visits these as well as the current one.
     ///
-    /// A job writes sidecars at two moments under one output root each: the
-    /// naming data when it is saved, the audio tracks only in stage 3. The root
+    /// A job writes sidecars at multiple moments under one output root each:
+    /// the original transcript before diarization, naming data when it is saved,
+    /// and audio tracks in stage 3. The root
     /// is a `let` on the queue, so the two differ only across a rebuild or a
     /// restart, which a restored job runs into after the output folder setting
     /// has moved. One URL cannot name both roots, and overwriting it was the
@@ -283,6 +287,7 @@ struct PipelineJob: Identifiable, Codable {
         self.warnings = []
         self.echo = nil
         self.transcriptPath = nil
+        self.rawTranscriptPath = nil
         self.protocolPath = nil
         self.namingSlug = nil
         self.includeFullTranscriptInProtocol = includeFullTranscriptInProtocol

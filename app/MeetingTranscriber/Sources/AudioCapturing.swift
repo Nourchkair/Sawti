@@ -15,6 +15,7 @@ import Foundation
 /// `DualSourceRecorder`'s stored properties — exactly what the type-erased
 /// `AnyObject` storage there used to be working around — and would also let a
 /// caller on 14.0 declare an `any AudioCapturing` it could never obtain.
+@MainActor
 protocol AudioCapturing: AnyObject {
     func start() throws
     func stop() -> AudioCaptureResult
@@ -88,6 +89,12 @@ enum LiveCaptureSession {
         // caller reaches a real session through here, so no copy of this check
         // is needed anywhere else — and a copy elsewhere would be unenforced.
         guard #available(macOS 14.2, *) else { throw RecorderError.unsupportedOS }
+        if configuration.appOutputURL == nil,
+           configuration.micOutputURL != nil,
+           configuration.micLiveSink == nil,
+           configuration.micDebugFault == nil {
+            return SawtiHelperMicCapture(configuration: configuration)
+        }
         return AudioCaptureSession(configurationForThisBuild(configuration))
     }
 }

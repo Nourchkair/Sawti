@@ -13,7 +13,7 @@
     /// Bind: `127.0.0.1:9876`. Two layers of defense:
     /// - Origin-header reject blocks browser CSRF / DNS-rebinding (`fetch()` from a
     ///   page on the user's machine sends Origin; curl and native CLIs don't).
-    /// - Bearer-token auth read from `~/Library/Application Support/MeetingTranscriber/.rpc-token`
+    /// - Bearer-token auth read from `~/Library/Application Support/Sawti/.rpc-token`
     ///   (chmod 0600) keeps other local users on a shared Mac out and adds
     ///   defense-in-depth against compromised processes that lack read access
     ///   to the user's data dir.

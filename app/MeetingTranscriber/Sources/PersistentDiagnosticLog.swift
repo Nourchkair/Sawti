@@ -42,14 +42,14 @@ struct RestartPolicy: Equatable {
     }
 }
 
-/// Manages a rolling on-disk mirror of `os.Logger` output for the
-/// `com.meetingtranscriber*` subsystems. Files are written by a background
+/// Manages a rolling on-disk mirror of `os.Logger` output for Sawti and its
+/// retained AudioTapLib dependency. Files are written by a background
 /// `log stream` subprocess (see `Streamer`) and rotated daily.
 /// `DiagnosticExporter` reads from these files when present, so users can
 /// reproduce a bug, wait, and still export hours-old logs — beyond the
 /// macOS unified-log retention window for `.info`-level entries.
 enum PersistentDiagnosticLog {
-    /// `~/Library/Logs/MeetingTranscriber/` — Apple convention, picked up
+    /// `~/Library/Logs/Sawti/` — Apple convention, picked up
     /// by Console.app's "Log Reports" tab and not auto-cleaned by macOS.
     static var logDirectory: URL {
         let library: URL
@@ -60,7 +60,7 @@ enum PersistentDiagnosticLog {
         }
         let logs = library
             .appendingPathComponent("Logs", isDirectory: true)
-            .appendingPathComponent("MeetingTranscriber", isDirectory: true)
+            .appendingPathComponent("Sawti", isDirectory: true)
         try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
         return logs
     }
@@ -104,7 +104,7 @@ enum PersistentDiagnosticLog {
     /// Shared by the `Streamer` argument list and the orphan reaper so the two
     /// can never drift — the reaper kills only processes whose command line
     /// carries this exact marker, never an unrelated `log stream` a user started.
-    static let streamPredicate = "subsystem CONTAINS 'com.meetingtranscriber'"
+    static let streamPredicate = "subsystem CONTAINS 'com.nourchkair.sawti' OR subsystem CONTAINS 'com.meetingtranscriber.audiotap'"
 
     /// Path of the `log` binary we spawn. Reused by the reaper's command match.
     static let logExecutablePath = "/usr/bin/log"
@@ -286,7 +286,7 @@ enum PersistentDiagnosticLog {
             private let restartPolicy: RestartPolicy
             private var recentFailures: [Date] = []
             private let restartQueue = DispatchQueue(
-                label: "com.meetingtranscriber.persistent-log-streamer.restart",
+                label: "com.nourchkair.sawti.persistent-log-streamer.restart",
             )
 
             init(

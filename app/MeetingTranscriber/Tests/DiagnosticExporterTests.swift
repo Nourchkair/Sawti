@@ -129,7 +129,7 @@ final class DiagnosticExporterTests: XCTestCase {
         )
         XCTAssertEqual(count, 1)
         let written = try String(contentsOf: tmpDst, encoding: .utf8)
-        XCTAssertTrue(written.contains("MeetingTranscriber 1.0"))
+        XCTAssertTrue(written.contains("Sawti 1.0"))
         XCTAssertTrue(written.contains("hello world"))
     }
 
@@ -179,6 +179,6 @@ final class DiagnosticExporterTests: XCTestCase {
         )
         XCTAssertEqual(count, 0)
         let written = try String(contentsOf: tmpDst, encoding: .utf8)
-        XCTAssertTrue(written.contains("MeetingTranscriber 1.0"))
+        XCTAssertTrue(written.contains("Sawti 1.0"))
     }
 }

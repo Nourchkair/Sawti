@@ -32,6 +32,9 @@ extension PipelineQueue {
     /// Output of the transcription stage, consumed by diarization + protocol save.
     private struct TranscriptionOutput {
         let transcript: String
+        /// Model-returned text before terminology normalization, echo filtering,
+        /// diarization or speaker naming.
+        let originalASRTranscript: String
         /// The recording-level line this job's transcript opens with, resolved
         /// once in `transcribe` and carried so the diarization stage renders
         /// the same one. The job holds the fact it comes from; this is that
@@ -44,6 +47,11 @@ extension PipelineQueue {
         /// defensive re-transcription fallback must not pick up Settings edits
         /// made while this job is being processed.
         let terminologyNormalizer: TerminologyNormalizer
+    }
+
+    private struct DualSourceTranscription {
+        let mergedSegments: [TimestampedSegment]
+        let originalASRTranscript: String
     }
 
     /// Typed errors thrown by the pipeline stages.
@@ -117,31 +125,26 @@ extension PipelineQueue {
         )
     }
 
-    /// Put the transcript on disk as soon as transcription produced it.
-    ///
-    /// Diarization is where this pipeline dies hardest, and a model that crashes
-    /// on a given recording crashes again next launch, because the restored job
-    /// runs the same stage over the same audio. Without this write the
-    /// transcript is persisted in no round at all and the recording is lost
-    /// however often it is retried. Stage 3 writes the same file again with the
-    /// labelled version, so on every path that reaches it this costs one extra
-    /// pass over text already in hand and leaves no trace.
-    ///
-    /// On the paths that do not reach stage 3, the draft is the point, and it
-    /// stays: an unlabelled transcript remains for a job that was cancelled or
-    /// killed mid-diarization, where previously nothing did. That is the trade,
-    /// not an oversight.
-    ///
-    /// Best effort on purpose: a job that cannot write here will report the real
-    /// problem when stage 3 tries again and does not swallow it.
-    private func saveTranscriptDraft(_ transcript: String, ctx: JobContext, outputDir: URL) {
-        guard let path = try? ProtocolGenerator.saveTranscript(
-            transcript, basename: ctx.slug,
-            dir: outputDir.appendingPathComponent("protocols"),
-        ) else { return }
+    /// Save both transcript layers before diarization begins. The immutable
+    /// original ASR result is retained independently, while the working draft
+    /// may later be rewritten with normalized wording and speaker labels. If
+    /// diarization fails or the app exits mid-stage, the recording and both
+    /// recoverable transcript forms remain available. Failure to preserve the
+    /// original ASR result fails the job visibly.
+    private func saveOriginalTranscript(
+        _ originalASRTranscript: String, ctx: JobContext, outputDir: URL,
+    ) throws {
+        let protocolsDir = outputDir.appendingPathComponent("protocols")
+        let originalPath = try OriginalTranscriptStore.save(
+            originalASRTranscript,
+            basename: ctx.slug,
+            directory: protocolsDir,
+        )
         if let idx = jobs.firstIndex(where: { $0.id == ctx.jobID }) {
-            jobs[idx].transcriptPath = path
+            jobs[idx].rawTranscriptPath = originalPath
             jobs[idx].namingSlug = ctx.slug
+            jobs[idx].recordSidecarOutputDir(outputDir)
+            saveSnapshot()
         }
     }
 
@@ -219,7 +222,11 @@ extension PipelineQueue {
                 return
             }
 
-            saveTranscriptDraft(transcription.transcript, ctx: ctx, outputDir: outputDir)
+            try saveOriginalTranscript(
+                transcription.originalASRTranscript,
+                ctx: ctx,
+                outputDir: outputDir,
+            )
 
             let finalTranscript = await diarize(
                 transcription, ctx: ctx, engine: engine,
@@ -325,7 +332,7 @@ extension PipelineQueue {
     private func transcribeDualSource(
         _ ctx: JobContext, engine: any TranscribingEngine, workDir: URL,
         appAudioPath: URL, micAudioPath: URL,
-    ) async throws -> [TimestampedSegment] {
+    ) async throws -> DualSourceTranscription {
         let app16k = workDir.appendingPathComponent("app_16k.wav")
         let mic16k = workDir.appendingPathComponent("mic_16k.wav")
         async let appResample: Void = resample(appAudioPath, to: app16k, track: "app", ctx: ctx)
@@ -425,7 +432,14 @@ extension PipelineQueue {
                     "echo_dedup suppressed=\(suppressed, privacy: .public) mixed=\(mixed, privacy: .public) own=\(kept, privacy: .public) undecided=\(unknown, privacy: .public) of=\(micSegments.count, privacy: .public)",
                 )
         }
-        return segments
+        let originalASRTranscript = [
+            "## App audio ASR\n\(originalASRText(appSegments))",
+            "## Microphone ASR\n\(originalASRText(micSegments))",
+        ].joined(separator: "\n\n")
+        return DualSourceTranscription(
+            mergedSegments: segments,
+            originalASRTranscript: originalASRTranscript,
+        )
     }
 
     /// Stage 1 — resample source audio to 16 kHz and transcribe. Dual-source
@@ -444,16 +458,18 @@ extension PipelineQueue {
         // with differently normalized app and microphone segments.
         let normalizer = terminologyNormalizer()
         let transcript: String
+        let originalASRTranscript: String
         // Segments cached for potential diarization reuse (avoids double transcription)
         var cachedSegments: [TimestampedSegment]? // swiftlint:disable:this discouraged_optional_collection
         let isDualSource = ctx.appPath != nil && ctx.micPath != nil
         if let appAudioPath = ctx.appPath, let micAudioPath = ctx.micPath {
-            let segments = try await transcribeDualSource(
+            let dualTranscription = try await transcribeDualSource(
                 ctx, engine: engine, workDir: workDir,
                 appAudioPath: appAudioPath, micAudioPath: micAudioPath,
             )
-            let normalizedSegments = normalize(segments, with: normalizer)
+            let normalizedSegments = normalize(dualTranscription.mergedSegments, with: normalizer)
             cachedSegments = normalizedSegments
+            originalASRTranscript = dualTranscription.originalASRTranscript
             transcript = normalizedSegments.transcriptText(note: transcriptNote(ctx.jobID))
         } else {
             // Single-source: resample mix to 16kHz
@@ -475,6 +491,7 @@ extension PipelineQueue {
 
             // Use transcribeSegments to cache results for diarization
             let rawSegments = try await engine.transcribeSegments(audioPath: transcriptionPath)
+            originalASRTranscript = originalASRText(rawSegments)
             var segments = normalize(rawSegments, with: normalizer)
 
             // Remap timestamps back to original timeline if VAD was used
@@ -501,6 +518,7 @@ extension PipelineQueue {
 
         return TranscriptionOutput(
             transcript: transcript,
+            originalASRTranscript: originalASRTranscript,
             note: transcriptNote(ctx.jobID),
             cachedSegments: cachedSegments,
             isDualSource: isDualSource,
@@ -521,6 +539,14 @@ extension PipelineQueue {
                 speaker: segment.speaker,
             )
         }
+    }
+
+    /// Render every engine-returned segment without applying the working
+    /// transcript's suppression filter, terminology replacement or timeline
+    /// remapping. The timestamps and words are the exact segment values returned
+    /// by the transcription engine for that source.
+    private func originalASRText(_ segments: [TimestampedSegment]) -> String {
+        segments.map(\.formattedLine).joined(separator: "\n")
     }
 
     /// Stage 2 — optional speaker diarization. Returns the transcript with
