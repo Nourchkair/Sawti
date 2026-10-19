@@ -5,10 +5,11 @@ Recorded 2026-10-18 for the initial Sawti implementation.
 ## Selected source
 
 - Upstream: [pasrom/meeting-transcriber](https://github.com/pasrom/meeting-transcriber)
-- Sawti working branch: `sawti/dev`
+- Sawti personal fork: [Nourchkair/meeting-transcriber](https://github.com/Nourchkair/meeting-transcriber), verified as a fork of `pasrom/meeting-transcriber` on 2026-10-18.
+- Sawti working branch: `sawti/dev` in the personal fork, based on the pinned commit below. Initial Sawti documentation commits are additive and do not alter upstream source.
 - Base commit: `a4f6af6df2674bc4e18097084a128af469823fab` (`test(app): pin who owns the queue snapshot file`, committed 2026-10-08)
 - Upstream `main` observed during setup: the same commit. `v0.8.1` remains an older release and is not the starting point.
-- Local Git `origin` fetch URL is upstream. Its push URL is deliberately set to `disabled://sawti-upstream-read-only`, and `push.default` is `nothing`; do not remove that guard as part of ordinary development. No upstream fork or Sawti remote is configured.
+- Local Git `origin` fetches and pushes to the personal fork. Local Git `upstream` fetches from the original public repository; its push URL is deliberately set to `disabled://sawti-upstream-read-only`, and `push.default` is `nothing`. Keep development pushes on `origin`; do not remove the upstream push guard during ordinary work.
 - Sawti inherits the repository's MIT license and commit ancestry. Keep the copyright and permission notice, review transitive code/model obligations against the exact assets shipped, and record Sawti-specific attribution additively.
 
 ## Source facts confirmed at the pinned commit
@@ -51,7 +52,8 @@ The user accepted this MacBook Air M2/8 GB as Sawti's development target. It can
 
 | Check | Result |
 |---|---|
-| Checkout commit and branch | `a4f6af6df2674bc4e18097084a128af469823fab`, branch `sawti/dev` |
+| Pinned upstream base | `a4f6af6df2674bc4e18097084a128af469823fab`, branch `main` |
+| Owned remote and working branch | `Nourchkair/meeting-transcriber`, branch `sawti/dev`; two additive Sawti baseline documentation commits pushed |
 | Working tree at start | Clean |
 | Upstream `main` at setup | Same SHA as the selected baseline |
 | SPM lock pins | WhisperKit 1.1.0; FluidAudio 0.17.4; exact revisions recorded in the lockfile |
