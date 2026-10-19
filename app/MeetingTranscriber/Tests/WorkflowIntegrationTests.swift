@@ -175,6 +175,27 @@ final class WorkflowIntegrationTests: XCTestCase {
         }
     }
 
+    func testWorkflowPersistsTranscriptSegmentsOwnerOnly() async throws {
+        let (h, _) = try makeHarness(diarizeEnabled: false, stagingDir: tmpDir)
+        h.queue.enqueue(makeJob(audioPath: h.audioPath))
+        await h.queue.processNext()
+
+        let slug = try XCTUnwrap(h.queue.jobs.first?.namingSlug)
+        let segmentsPath = tmpDir.appendingPathComponent("recordings")
+            .appendingPathComponent("\(slug)_segments.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: segmentsPath.path))
+        let mode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: segmentsPath.path)[.posixPermissions] as? Int,
+        )
+        XCTAssertEqual(mode & 0o777, 0o600, "Transcript segment text must be owner-only")
+
+        let savedSegments = try JSONDecoder().decode(
+            [TimestampedSegment].self,
+            from: Data(contentsOf: segmentsPath),
+        )
+        XCTAssertEqual(savedSegments.map(\.text), ["Hello world", "This is a test"])
+    }
+
     func testWorkflowCanExcludeFullTranscriptFromProtocol() async throws {
         let (h, _) = try makeHarness(includeFullTranscriptInProtocol: false)
         h.queue.enqueue(makeJob(audioPath: h.audioPath))
