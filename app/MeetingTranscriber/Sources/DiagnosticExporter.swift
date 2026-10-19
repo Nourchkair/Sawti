@@ -50,7 +50,7 @@ enum DiagnosticExporter {
             .joined(separator: " ")
         let timestamp = formatter.string(from: Date())
         return """
-        # MeetingTranscriber \(appVersion) (\(commit))
+        # Sawti \(appVersion) (\(commit))
         # macOS \(macOSVersion)
         # exported_at=\(timestamp)
         # settings: \(pairs)
@@ -137,7 +137,7 @@ enum DiagnosticExporter {
         let store = try OSLogStore(scope: .currentProcessIdentifier)
         let position = store.position(date: Date().addingTimeInterval(-windowSeconds))
         let predicate = NSPredicate(
-            format: "subsystem CONTAINS 'com.meetingtranscriber'",
+            format: "subsystem CONTAINS 'com.nourchkair.sawti' OR subsystem CONTAINS 'com.meetingtranscriber.audiotap'",
         )
         let entries = try store.getEntries(at: position, matching: predicate)
 

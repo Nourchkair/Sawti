@@ -104,6 +104,7 @@ final class WorkflowIntegrationTests: XCTestCase {
 
     private func assertNoRawTranscriptArtifacts(_ h: Harness) {
         XCTAssertNil(h.queue.jobs.first?.transcriptPath)
+        XCTAssertNil(h.queue.jobs.first?.rawTranscriptPath)
         let protocolsDir = tmpDir.appendingPathComponent("protocols")
         let recordingsDir = tmpDir.appendingPathComponent("recordings")
         let protocolFiles = (try? FileManager.default.contentsOfDirectory(atPath: protocolsDir.path)) ?? []
@@ -303,6 +304,18 @@ final class WorkflowIntegrationTests: XCTestCase {
         XCTAssertEqual(h.diarization.runCount, 1)
         XCTAssertTrue(h.protocolGen.generateCalled)
         XCTAssertEqual(h.queue.jobs.first?.state, .done)
+
+        let originalPath = try XCTUnwrap(h.queue.jobs.first?.rawTranscriptPath)
+        let original = try String(contentsOf: originalPath, encoding: .utf8)
+        let finalPath = try XCTUnwrap(h.queue.jobs.first?.transcriptPath)
+        let final = try String(contentsOf: finalPath, encoding: .utf8)
+        XCTAssertEqual(original, "[00:00] Hello world\n[00:05] This is a test")
+        XCTAssertFalse(original.contains("Alice"))
+        XCTAssertTrue(final.contains("Alice: Hello world"))
+        let mode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: originalPath.path)[.posixPermissions] as? Int,
+        )
+        XCTAssertEqual(mode & 0o777, 0o600)
     }
 
     func testWorkflowConfirmedNamingCleansRawOutputWhenDisabled() async throws {

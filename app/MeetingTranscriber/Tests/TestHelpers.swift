@@ -366,6 +366,7 @@ final class MockDiarization: DiarizationProvider, @unchecked Sendable {
     var receivedNumSpeakers: [Int?] = []
     var throwOnPathSuffix: String?
     var resultToReturn: DiarizationResult?
+    var afterRun: (() -> Void)?
 
     func run(audioPath: URL, numSpeakers: Int?, meetingTitle _: String) throws -> DiarizationResult {
         runCount += 1
@@ -376,6 +377,7 @@ final class MockDiarization: DiarizationProvider, @unchecked Sendable {
                 userInfo: [NSLocalizedDescriptionKey: "mock diarizer threw on \(audioPath.lastPathComponent)"],
             )
         }
+        afterRun?()
         if let result = resultToReturn {
             return result
         }

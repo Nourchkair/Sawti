@@ -67,4 +67,30 @@ final class LiveCaptureSessionTests: XCTestCase {
     func testMakeBuildsASessionWithoutOpeningAnything() throws {
         XCTAssertNoThrow(try LiveCaptureSession.make(configuration()))
     }
+
+    func testMicOnlyCaptureUsesIsolatedHelper() throws {
+        let mic = URL(fileURLWithPath: "/tmp/sawti-mic.wav")
+        let config = AudioCaptureConfiguration(
+            pids: [], appOutputURL: nil, micOutputURL: mic, sampleRate: 48000, channels: 1,
+        )
+
+        let session = try LiveCaptureSession.make(config)
+
+        XCTAssertTrue(session is SawtiHelperMicCapture)
+    }
+
+    @available(macOS 14.2, *)
+    func testDualSourceCaptureKeepsExistingAudioTapSession() throws {
+        let config = AudioCaptureConfiguration(
+            pids: [42],
+            appOutputURL: URL(fileURLWithPath: "/tmp/sawti-app.raw"),
+            micOutputURL: URL(fileURLWithPath: "/tmp/sawti-mic.wav"),
+            sampleRate: 48000,
+            channels: 2,
+        )
+
+        let session = try LiveCaptureSession.make(config)
+
+        XCTAssertTrue(session is AudioCaptureSession)
+    }
 }

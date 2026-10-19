@@ -14,7 +14,7 @@ private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "OutputD
 /// Why it exists: when the chosen folder's bookmark stops resolving (an
 /// unplugged drive, an unmounted share, a deleted folder), `effectiveOutputDir`
 /// quietly yields the default and recordings land in
-/// `~/Downloads/MeetingTranscriber` with nothing saying so. The fallback is
+/// `~/Downloads/Sawti` with nothing saying so. The fallback is
 /// right, a recording must never be blocked or lost over a missing folder, so
 /// this keeps it and adds the telling.
 ///

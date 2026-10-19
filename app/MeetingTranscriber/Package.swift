@@ -5,6 +5,10 @@ import PackageDescription
 let package = Package(
     name: "MeetingTranscriber",
     platforms: [.macOS(.v14)],
+    products: [
+        .executable(name: "MeetingTranscriber", targets: ["MeetingTranscriber"]),
+        .executable(name: "SawtiCaptureHelper", targets: ["SawtiCaptureHelper"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.5"),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.19.1"),
@@ -79,6 +83,19 @@ let package = Package(
                 .linkedLibrary("c++"),
                 .linkedFramework("Accelerate"),
             ]
+        ),
+        .executableTarget(
+            name: "SawtiCaptureHelper",
+            dependencies: [.product(name: "AudioTapLib", package: "audiotap")],
+            path: "Helpers/SawtiCaptureHelper",
+            swiftSettings: [
+                .treatAllWarnings(as: .error),
+                .unsafeFlags([
+                    "-Xfrontend", "-warn-long-function-bodies=300",
+                    "-Xfrontend", "-warn-long-expression-type-checking=300",
+                ]),
+                .enableUpcomingFeature("ExistentialAny"),
+            ],
         ),
         .testTarget(
             name: "MeetingTranscriberTests",

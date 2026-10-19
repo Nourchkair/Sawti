@@ -65,8 +65,10 @@ def record_tree(label, relative, recursive):
         for name in names:
             records[label + "/" + name] = metadata(os.path.join(root, name))
 
-record_tree("app-ipc", "Library/Application Support/MeetingTranscriber/ipc", True)
-record_tree("legacy-ipc", ".meeting-transcriber", True)
+record_tree("sawti-app-ipc", "Library/Application Support/Sawti/ipc", True)
+record_tree("legacy-sawti-ipc", ".sawti", True)
+record_tree("meeting-transcriber-app-ipc", "Library/Application Support/MeetingTranscriber/ipc", True)
+record_tree("legacy-meeting-transcriber-ipc", ".meeting-transcriber", True)
 
 print(json.dumps(records, sort_keys=True, separators=(",", ":")))
 PY

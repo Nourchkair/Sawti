@@ -38,7 +38,7 @@ struct AdvancedSettingsView: View {
                     label: "Screen Recording",
                     detail: Self.screenRecordingDetail,
                     granted: screenRecordingOK,
-                    help: "\(SystemSettingsPaths.screenRecording) → enable Meeting Transcriber",
+                    help: "\(SystemSettingsPaths.screenRecording) → enable Sawti",
                     settingsURL: PrivacyPane.screenCapture.url,
                 )
                 PermissionRow(
@@ -48,7 +48,7 @@ struct AdvancedSettingsView: View {
                         : "Denied — click to open Settings",
                     granted: micPermission == .authorized,
                     warning: micPermission == .notDetermined,
-                    help: "System Settings → Privacy & Security → Microphone → enable Meeting Transcriber",
+                    help: "System Settings → Privacy & Security → Microphone → enable Sawti",
                     settingsURL: PrivacyPane.microphone.url,
                 )
                 PermissionRow(
@@ -56,7 +56,7 @@ struct AdvancedSettingsView: View {
                     detail: "Optional — enables mute detection and meeting naming",
                     granted: accessibilityOK,
                     optional: true,
-                    help: "System Settings → Privacy & Security → Accessibility → enable Meeting Transcriber",
+                    help: "System Settings → Privacy & Security → Accessibility → enable Sawti",
                     settingsURL: PrivacyPane.accessibility.url,
                 )
 
@@ -104,7 +104,7 @@ struct AdvancedSettingsView: View {
                     }
                     Text(
                         "Persistent logs are kept for 30 days at"
-                            + " ~/Library/Logs/MeetingTranscriber/. Useful when"
+                            + " ~/Library/Logs/Sawti/. Useful when"
                             + " you need to attach logs from a session that"
                             + " happened earlier today (or yesterday).",
                     )
@@ -145,7 +145,7 @@ struct AdvancedSettingsView: View {
         guard !isExportingDiagnostics else { return }
         let stamp = Int(Date().timeIntervalSince1970)
         let outURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MeetingTranscriber-diagnostics-\(stamp).log")
+            .appendingPathComponent("Sawti-diagnostics-\(stamp).log")
         let info = DiagnosticExporter.HeaderInfo(
             appVersion: Bundle.main.appVersion,
             commit: Bundle.main.gitCommitHash,

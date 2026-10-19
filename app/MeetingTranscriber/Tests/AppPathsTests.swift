@@ -26,8 +26,8 @@ final class AppPathsTests: XCTestCase {
 
     func testDataDirUsesApplicationSupport() {
         XCTAssertTrue(
-            AppPaths.dataDir.path.contains("Application Support/MeetingTranscriber"),
-            "dataDir should be under Application Support",
+            AppPaths.dataDir.path.contains("Application Support/Sawti"),
+            "dataDir should use Sawti's isolated Application Support namespace",
         )
     }
 
@@ -51,7 +51,7 @@ final class AppPathsTests: XCTestCase {
     /// the orphan scan walk, so moving it silently would strand recordings.
     func testRecordingsDirIsTheAppSupportStagingPath() {
         XCTAssertTrue(
-            AppPaths.recordingsDir.path.contains("Library/Application Support/MeetingTranscriber/recordings"),
+            AppPaths.recordingsDir.path.contains("Library/Application Support/Sawti/recordings"),
         )
     }
 
@@ -74,6 +74,11 @@ final class AppPathsTests: XCTestCase {
         AppPaths.migrateIfNeeded()
         AppPaths.migrateIfNeeded()
         // If we reach here, no crash occurred
+    }
+
+    func testLegacyIPCPathBelongsToSawtiAndDoesNotReadMeetingTranscriberData() {
+        XCTAssertEqual(AppPaths.legacyIpcDir.lastPathComponent, ".sawti")
+        XCTAssertNotEqual(AppPaths.legacyIpcDir.lastPathComponent, ".meeting-transcriber")
     }
 
     func testIpcDirExistsAfterMigration() {
@@ -124,6 +129,6 @@ final class AppPathsTests: XCTestCase {
 
         XCTAssertEqual(marker.deletingLastPathComponent(), AppPaths.dataDir)
         XCTAssertNotEqual(marker.deletingLastPathComponent(), AppPaths.recordingsDir)
-        XCTAssertEqual(marker.lastPathComponent, "\(Bundle.main.bundleIdentifier ?? "MeetingTranscriber").running")
+        XCTAssertEqual(marker.lastPathComponent, "\(Bundle.main.bundleIdentifier ?? "com.nourchkair.sawti").running")
     }
 }

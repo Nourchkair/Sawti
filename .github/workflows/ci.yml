@@ -275,6 +275,11 @@ jobs:
         with:
           cache-key-suffix: ${{ matrix.variant }}
           swift-flags: ${{ matrix.swift-flags }}
+      # The helper is a separate executable product, so `swift test` does not
+      # necessarily build it. Keep its launch target type-checked in both
+      # release variants alongside the host app.
+      - name: Build Sawti capture helper
+        run: cd app/MeetingTranscriber && swift build -c release --product SawtiCaptureHelper ${{ matrix.swift-flags }}
       # Without this the echo-cancellation tests skip, which is how this
       # feature reached a review with single-digit patch coverage on the two
       # files that do the work. The gap is worse than the number: the library

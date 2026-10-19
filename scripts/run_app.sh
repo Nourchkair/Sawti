@@ -24,17 +24,19 @@ export TRANSCRIBER_ROOT
 
 SPM_DIR="$TRANSCRIBER_ROOT/app/MeetingTranscriber"
 BUILD_BINARY="$SPM_DIR/.build/release/MeetingTranscriber"
+HELPER_BUILD_BINARY="$SPM_DIR/.build/release/SawtiCaptureHelper"
 APP_BUNDLE="$SPM_DIR/.build/MeetingTranscriber-Dev.app"
 APP_MACOS="$APP_BUNDLE/Contents/MacOS"
 APP_BINARY="$APP_MACOS/MeetingTranscriber"
+APP_HELPER="$APP_BUNDLE/Contents/Helpers/SawtiCaptureHelper"
 INFO_PLIST="$SPM_DIR/Sources/Info.plist"
 # shellcheck source=lib/bundle-ids.sh
 source "$SCRIPT_DIR/lib/bundle-ids.sh"
 
 # Always rebuild to pick up code changes
-echo "Building Meeting Transcriber app..."
+echo "Building Sawti app..."
 cd "$SPM_DIR"
-SWIFT_BUILD_FLAGS=(-c release)
+SWIFT_BUILD_FLAGS=(-c release --disable-keychain --disable-automatic-resolution)
 # Opt-in fault-injection build for the mic-device-change e2e lane only
 # (scripts/e2e-app.sh --mic-device-change). Compiles the issue #379
 # reproduction seam in MicCaptureHandler; never set for normal/release builds.
@@ -42,7 +44,8 @@ if [ -n "${MTT_FAULT_INJECTION:-}" ]; then
     SWIFT_BUILD_FLAGS+=(-Xswiftc -DE2E_FAULT_INJECTION)
     echo "  (fault-injection build: -DE2E_FAULT_INJECTION)"
 fi
-swift build "${SWIFT_BUILD_FLAGS[@]}"
+swift build "${SWIFT_BUILD_FLAGS[@]}" --product MeetingTranscriber
+swift build "${SWIFT_BUILD_FLAGS[@]}" --product SawtiCaptureHelper
 
 # Which certificate to sign with, decided BEFORE the bundle is touched. Half of
 # the answer is the certificate the previous build signed this bundle with,
@@ -54,6 +57,11 @@ swift build "${SWIFT_BUILD_FLAGS[@]}"
 # shellcheck source=lib/signing.sh
 source "$SCRIPT_DIR/lib/signing.sh"
 choose_signing_identity "$APP_BUNDLE"
+if [ -n "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
+    CHOSEN_IDENTITY="$SAWTI_DEV_SIGNING_IDENTITY"
+    CHOSEN_IDENTITY_REASON="selected explicit Sawti development identity"
+    CHOSEN_IDENTITY_LISTING="SHA-1 $CHOSEN_IDENTITY"
+fi
 
 # Assemble .app bundle
 mkdir -p "$APP_MACOS"
@@ -71,6 +79,12 @@ GIT_HASH=$(git -C "$TRANSCRIBER_ROOT" rev-parse --short HEAD 2>/dev/null || echo
 /usr/libexec/PlistBuddy -c "Set :GitCommitHash $GIT_HASH" "$APP_BUNDLE/Contents/Info.plist"
 
 cp "$BUILD_BINARY" "$APP_BINARY"
+if [ ! -x "$HELPER_BUILD_BINARY" ]; then
+    echo "ERROR: SwiftPM did not build SawtiCaptureHelper" >&2
+    exit 1
+fi
+mkdir -p "$(dirname "$APP_HELPER")"
+cp "$HELPER_BUILD_BINARY" "$APP_HELPER"
 
 # Licences for the third-party code and weights this bundle redistributes. The
 # dev app is not distributed, but scripts/e2e-app.sh deploys it, so keeping it
@@ -89,7 +103,9 @@ install_third_party_licenses "$APP_BUNDLE/Contents/Resources"
 # alone would hide a poisoned cache.
 # shellcheck source=lib/localvqe-resources.sh
 source "$SCRIPT_DIR/lib/localvqe-resources.sh"
-if ! install_localvqe_resources "$APP_BUNDLE/Contents/Resources"; then
+if [ "${SAWTI_SKIP_OPTIONAL_MODEL_FETCH:-0}" = "1" ]; then
+    echo "  Skipping the optional LocalVQE model fetch; echo cancellation will find no model."
+elif ! install_localvqe_resources "$APP_BUNDLE/Contents/Resources"; then
     echo "  WARNING: LocalVQE model unavailable; echo cancellation will find no model."
 fi
 
@@ -116,6 +132,14 @@ fi
 # and any later re-sign of the deployed bundle cannot drift apart (issue #609).
 prepare_signing "$APP_BUNDLE" "$DEV_ENTITLEMENTS" "$DEV_BUNDLE_ID" "$CHOSEN_IDENTITY"
 if [ -n "$SIGNING_IDENTITY" ]; then
+    codesign --force --sign "$SIGNING_IDENTITY" --identifier "$DEV_BUNDLE_ID" \
+        --entitlements "$DEV_ENTITLEMENTS" "$APP_HELPER"
+else
+    codesign --force --sign - --identifier "$DEV_BUNDLE_ID" \
+        --entitlements "$DEV_ENTITLEMENTS" "$APP_HELPER"
+fi
+codesign --verify --strict "$APP_HELPER"
+if [ -n "$SIGNING_IDENTITY" ]; then
     # Failure is fatal and its stderr is kept. This used to be `2>/dev/null && echo`,
     # which hid both: a bad entitlements path left the bundle completely UNSIGNED
     # with no diagnostic, and every lane that rsyncs it then loses its TCC grants.
@@ -140,7 +164,7 @@ if [ "$BUILD_ONLY" = true ]; then
     exit 0
 fi
 
-echo "Starting Meeting Transcriber..."
+echo "Starting Sawti..."
 echo "  TRANSCRIBER_ROOT=$TRANSCRIBER_ROOT"
 
 # Launch via `open` so macOS LaunchServices properly registers the app

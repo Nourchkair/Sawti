@@ -7,7 +7,7 @@ import XCTest
 /// defaults suite and Keychain account so `--parallel` runs never share state.
 ///
 /// The default folder is injected and points into a temp directory: the
-/// production default is `~/Downloads/MeetingTranscriber`, and a test that
+/// production default is `~/Downloads/Sawti`, and a test that
 /// resolves to it is one step from writing there.
 final class AppSettingsOutputDirectoryTests: XCTestCase {
     // swiftlint:disable implicitly_unwrapped_optional

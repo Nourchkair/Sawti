@@ -53,14 +53,14 @@
             XCTAssertEqual(s.recording.liveCaptionsSize, "medium")
             XCTAssertEqual(s.recording.asymmetricSilenceWarningSeconds, 90.0)
             XCTAssertEqual(s.transcription.engine, "whisperKit")
-            XCTAssertEqual(s.transcription.whisperLanguage, "de")
+            XCTAssertEqual(s.transcription.whisperLanguage, "")
             XCTAssertTrue(s.diarization.diarize)
             XCTAssertEqual(s.diarization.mode, "offline")
             XCTAssertEqual(s.diarization.numSpeakers, 0)
             XCTAssertFalse(s.diarization.vadEnabled)
             XCTAssertEqual(s.diarization.clusterThreshold, AppSettings.DiarizerTuningDefaults.clusterThreshold)
-            XCTAssertEqual(s.protocolGeneration.language, "German")
-            XCTAssertTrue(s.updates.checkForUpdates)
+            XCTAssertEqual(s.protocolGeneration.language, "English")
+            XCTAssertFalse(s.updates.checkForUpdates)
             XCTAssertFalse(s.updates.includePreReleases)
         }
 

@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>app.meetingtranscriber</string>
+    <string>com.nourchkair.sawti</string>
     <key>CFBundleName</key>
-    <string>Meeting Transcriber</string>
+    <string>Sawti</string>
     <key>CFBundleDisplayName</key>
-    <string>Meeting Transcriber</string>
+    <string>Sawti</string>
     <key>CFBundleExecutable</key>
     <string>MeetingTranscriber</string>
     <key>CFBundleVersion</key>
@@ -25,12 +25,12 @@
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>NSAudioCaptureUsageDescription</key>
-    <string>Meeting Transcriber records the meeting app’s own audio (the other participants) via a Core Audio process tap.</string>
+    <string>Sawti records audio from a meeting app when you start a meeting recording.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Meeting Transcriber needs microphone access to record meeting audio for transcription.</string>
+    <string>Sawti needs microphone access to record audio for transcription.</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Meeting Transcriber needs Screen Recording permission to detect active meetings by reading window titles.</string>
+    <string>Sawti uses Screen Recording permission to detect active meetings by reading window titles.</string>
     <key>NSAccessibilityUsageDescription</key>
-    <string>Meeting Transcriber uses Accessibility to detect mute state and read meeting participants.</string>
+    <string>Sawti uses Accessibility to detect mute state and read meeting participants.</string>
 </dict>
 </plist>

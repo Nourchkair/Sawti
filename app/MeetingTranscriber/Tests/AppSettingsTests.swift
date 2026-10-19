@@ -60,6 +60,9 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.micName, "Me")
         XCTAssertTrue(settings.diarize)
         XCTAssertEqual(settings.whisperKitModel, "openai_whisper-large-v3-v20240930_turbo")
+        XCTAssertEqual(settings.whisperLanguage, "", "Sawti starts with language auto-detection")
+        XCTAssertEqual(settings.protocolProvider, .none, "core transcription must not call a summarizer")
+        XCTAssertFalse(settings.checkForUpdates, "Alpha defaults to offline operation")
         XCTAssertTrue(settings.perChannelIndicatorEnabled)
         XCTAssertEqual(settings.asymmetricSilenceWarningSeconds, 90.0)
         XCTAssertFalse(settings.liveTranscriptionEnabled)
@@ -333,11 +336,7 @@ final class AppSettingsTests: XCTestCase {
     // MARK: - Protocol Provider
 
     func testProtocolProviderDefault() {
-        #if APPSTORE
-            XCTAssertEqual(settings.protocolProvider, .openAICompatible)
-        #else
-            XCTAssertEqual(settings.protocolProvider, .claudeCLI)
-        #endif
+        XCTAssertEqual(settings.protocolProvider, .none)
     }
 
     func testProtocolProviderPersistence() {
@@ -408,7 +407,7 @@ final class AppSettingsTests: XCTestCase {
     // MARK: - Update Settings
 
     func testCheckForUpdatesDefault() {
-        XCTAssertTrue(settings.checkForUpdates)
+        XCTAssertFalse(settings.checkForUpdates)
     }
 
     func testIncludePreReleasesDefault() {

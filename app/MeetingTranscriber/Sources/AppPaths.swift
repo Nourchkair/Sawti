@@ -4,7 +4,7 @@ import os.log
 /// Centralized path constants and logger subsystem for the app.
 enum AppPaths {
     /// Logger subsystem for all os.log loggers.
-    static let logSubsystem = "com.meetingtranscriber"
+    static let logSubsystem = "com.nourchkair.sawti"
 
     /// XCTest workers use a disposable home when one is supplied by
     /// `scripts/test-isolated.sh`. The explicit environment seam keeps normal
@@ -59,18 +59,20 @@ enum AppPaths {
             ?? homeDirectory.appendingPathComponent("Library/Application Support", isDirectory: true)
     }()
 
-    /// App data directory: `~/Library/Application Support/MeetingTranscriber/`
+    /// Sawti data directory: `~/Library/Application Support/Sawti/`.
+    /// This separate namespace prevents the fork from reading, migrating, or
+    /// modifying data created by an installed Meeting Transcriber app.
     /// In sandbox, this automatically resolves to the container path.
-    /// Falls back to `~/.MeetingTranscriber/` if Application Support is unavailable.
+    /// Falls back to `~/.Sawti/` if Application Support is unavailable.
     static let dataDir: URL = {
         if isRunningTests || FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first != nil {
-            return applicationSupportDirectory.appendingPathComponent("MeetingTranscriber", isDirectory: true)
+            return applicationSupportDirectory.appendingPathComponent("Sawti", isDirectory: true)
         }
         Logger(subsystem: logSubsystem, category: "AppPaths")
             .error("Application Support directory unavailable — falling back to home directory")
         return homeDirectory
-            .appendingPathComponent(".MeetingTranscriber", isDirectory: true)
+            .appendingPathComponent(".Sawti", isDirectory: true)
     }()
 
     /// IPC directory: under `dataDir` for sandbox compatibility.
@@ -82,20 +84,20 @@ enum AppPaths {
     /// Protocols output directory (legacy, inside Application Support).
     static let protocolsDir = dataDir.appendingPathComponent("protocols", isDirectory: true)
 
-    /// Default protocols output in Downloads: `~/Downloads/MeetingTranscriber/`
+    /// Default transcripts output in Downloads: `~/Downloads/Sawti/`.
     /// In sandbox, `FileManager.urls(for: .downloadsDirectory)` resolves to the container-granted path.
     static let downloadsProtocolsDir: URL = {
         if isRunningTests {
             return homeDirectory
                 .appendingPathComponent("Downloads", isDirectory: true)
-                .appendingPathComponent("MeetingTranscriber", isDirectory: true)
+                .appendingPathComponent("Sawti", isDirectory: true)
         }
         guard let downloads = FileManager.default
             .urls(for: .downloadsDirectory, in: .userDomainMask).first
         else {
             return protocolsDir
         }
-        return downloads.appendingPathComponent("MeetingTranscriber", isDirectory: true)
+        return downloads.appendingPathComponent("Sawti", isDirectory: true)
     }()
 
     /// Speaker voice profiles DB.
@@ -110,15 +112,16 @@ enum AppPaths {
     /// leftover must not read as the other's crash. Kept out of
     /// `recordingsDir`, which is scanned for crash signatures by filename.
     static let livenessMarker = dataDir
-        .appendingPathComponent("\(Bundle.main.bundleIdentifier ?? "MeetingTranscriber").running")
+        .appendingPathComponent("\(Bundle.main.bundleIdentifier ?? "com.nourchkair.sawti").running")
 
-    /// Legacy IPC directory (`~/.meeting-transcriber/`) used before sandbox migration.
-    private static let legacyIpcDir = homeDirectory
-        .appendingPathComponent(".meeting-transcriber", isDirectory: true)
+    /// Sawti's own pre-sandbox IPC directory. Deliberately does not import
+    /// `~/.meeting-transcriber/`, which belongs to the separate upstream app.
+    static let legacyIpcDir = homeDirectory
+        .appendingPathComponent(".sawti", isDirectory: true)
 
     private static let logger = Logger(subsystem: logSubsystem, category: "AppPaths")
 
-    /// Migrate IPC files from `~/.meeting-transcriber/` to `dataDir/ipc/`.
+    /// Migrate IPC files from Sawti's legacy `~/.sawti/` directory to `dataDir/ipc/`.
     /// Safe to call multiple times — copyItem fails gracefully if destination exists.
     static func migrateIfNeeded() {
         let fm = FileManager.default

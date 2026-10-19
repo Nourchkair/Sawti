@@ -700,7 +700,7 @@ class PipelineQueue {
     private func removeRawTranscriptArtifactsIfSafe(for index: Int) {
         guard !transcriptOutputOptions(forJobID: jobs[index].id).saveRawTranscriptSeparately else { return }
         guard jobs[index].protocolPath != nil else {
-            if jobs[index].transcriptPath != nil {
+            if jobs[index].transcriptPath != nil || jobs[index].rawTranscriptPath != nil {
                 let warning = "Raw transcript retained because no protocol was saved"
                 if !jobs[index].warnings.contains(warning) {
                     jobs[index].warnings.append(warning)
@@ -710,6 +710,7 @@ class PipelineQueue {
         }
 
         let transcriptPath = jobs[index].transcriptPath
+        let rawTranscriptPath = jobs[index].rawTranscriptPath
         let slug = jobs[index].namingSlug
         if let transcriptPath {
             do {
@@ -725,6 +726,34 @@ class PipelineQueue {
                     "Failed to remove transcript according to output setting: \(error.localizedDescription, privacy: .public)",
                 )
                 jobs[index].warnings.append("Raw transcript could not be removed")
+            }
+        }
+        if let rawTranscriptPath {
+            do {
+                if let slug {
+                    var directories = jobs[index].sidecarDirs(orCurrent: outputDir)
+                        .map { $0.appendingPathComponent("protocols", isDirectory: true) }
+                    let recordedDirectory = rawTranscriptPath.deletingLastPathComponent()
+                    if !directories.contains(where: {
+                        $0.standardizedFileURL.path == recordedDirectory.standardizedFileURL.path
+                    }) {
+                        directories.append(recordedDirectory)
+                    }
+                    for directory in directories {
+                        try OriginalTranscriptStore.removeAll(basename: slug, directory: directory)
+                    }
+                } else {
+                    try FileManager.default.removeItem(at: rawTranscriptPath)
+                }
+                jobs[index].rawTranscriptPath = nil
+            } catch {
+                logger.warning(
+                    "Failed to remove original transcript according to output setting: \(error.localizedDescription, privacy: .public)",
+                )
+                let warning = "Original transcript could not be removed"
+                if !jobs[index].warnings.contains(warning) {
+                    jobs[index].warnings.append(warning)
+                }
             }
         }
         do {

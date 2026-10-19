@@ -137,7 +137,7 @@ final class PersistentDiagnosticLogTests: XCTestCase {
         /// A `log stream` we spawned (our predicate marker), re-parented to PID 1,
         /// is reaped.
         func test_orphanPids_matchesOurReparentedStreamer() {
-            let cmd = "/usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber' --style syslog --info"
+            let cmd = "/usr/bin/log stream --predicate \(PersistentDiagnosticLog.streamPredicate) --style syslog --info"
             let table: [(pid: Int32, ppid: Int32, command: String)] = [
                 (pid: 4242, ppid: 1, command: cmd),
             ]
@@ -147,7 +147,7 @@ final class PersistentDiagnosticLogTests: XCTestCase {
         /// A streamer still owned by a *running* sibling instance (ppid != 1) is a
         /// live child, not an orphan — leave it alone.
         func test_orphanPids_skipsLiveChildOfRunningParent() {
-            let cmd = "/usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber' --style syslog --info"
+            let cmd = "/usr/bin/log stream --predicate \(PersistentDiagnosticLog.streamPredicate) --style syslog --info"
             let table: [(pid: Int32, ppid: Int32, command: String)] = [
                 (pid: 4242, ppid: 777, command: cmd), // parent alive
             ]
@@ -168,14 +168,14 @@ final class PersistentDiagnosticLogTests: XCTestCase {
         /// excludes it.
         func test_orphanPids_skipsNonLogProcessMentioningPredicate() {
             let table: [(pid: Int32, ppid: Int32, command: String)] = [
-                (pid: 4242, ppid: 1, command: "grep subsystem CONTAINS 'com.meetingtranscriber' somefile"),
+                (pid: 4242, ppid: 1, command: "grep \(PersistentDiagnosticLog.streamPredicate) somefile"),
             ]
             XCTAssertEqual(PersistentDiagnosticLog.orphanPids(processTable: table, ownPid: 99), [])
         }
 
         /// Never reap ourselves even if the row otherwise matches (defence-in-depth).
         func test_orphanPids_neverReapsOwnPid() {
-            let cmd = "/usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber'"
+            let cmd = "/usr/bin/log stream --predicate \(PersistentDiagnosticLog.streamPredicate)"
             let table: [(pid: Int32, ppid: Int32, command: String)] = [
                 (pid: 99, ppid: 1, command: cmd),
             ]
@@ -185,7 +185,7 @@ final class PersistentDiagnosticLogTests: XCTestCase {
         /// Several rows at once: only the orphaned, predicate-matching `log` rows
         /// come back, preserving order.
         func test_orphanPids_returnsAllMatchingOrphans() {
-            let ourCmd = "/usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber' --style syslog --info"
+            let ourCmd = "/usr/bin/log stream --predicate \(PersistentDiagnosticLog.streamPredicate) --style syslog --info"
             let table: [(pid: Int32, ppid: Int32, command: String)] = [
                 (pid: 10, ppid: 1, command: ourCmd), // orphan ✓
                 (pid: 11, ppid: 1, command: "/usr/bin/log stream --predicate subsystem CONTAINS 'com.apple.foo'"), // unrelated ✗
@@ -200,15 +200,16 @@ final class PersistentDiagnosticLogTests: XCTestCase {
         /// Parses the `ps -axo pid=,ppid=,command=` shape, keeping spaces inside the
         /// command field intact.
         func test_parseProcessTable_parsesPidPpidAndSpacedCommand() {
+            let predicate = PersistentDiagnosticLog.streamPredicate
             let text = """
-              501     1 /usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber'
+              501     1 /usr/bin/log stream --predicate \(predicate)
               777   501 /Applications/Foo.app/Contents/MacOS/Foo --flag value
             """
             let rows = PersistentDiagnosticLog.parseProcessTable(text)
             XCTAssertEqual(rows.count, 2)
             XCTAssertEqual(rows[0].pid, 501)
             XCTAssertEqual(rows[0].ppid, 1)
-            XCTAssertEqual(rows[0].command, "/usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber'")
+            XCTAssertEqual(rows[0].command, "/usr/bin/log stream --predicate \(predicate)")
             XCTAssertEqual(rows[1].pid, 777)
             XCTAssertEqual(rows[1].ppid, 501)
             XCTAssertEqual(rows[1].command, "/Applications/Foo.app/Contents/MacOS/Foo --flag value")
@@ -226,9 +227,10 @@ final class PersistentDiagnosticLogTests: XCTestCase {
 
         /// End-to-end of the pure pair: real `ps`-style text → parse → orphan filter.
         func test_parseThenOrphanPids_endToEnd() {
+            let predicate = PersistentDiagnosticLog.streamPredicate
             let text = """
-              900     1 /usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber' --style syslog --info
-              901   900 /usr/bin/log stream --predicate subsystem CONTAINS 'com.meetingtranscriber'
+              900     1 /usr/bin/log stream --predicate \(predicate) --style syslog --info
+              901   900 /usr/bin/log stream --predicate \(predicate)
             """
             let rows = PersistentDiagnosticLog.parseProcessTable(text)
             // 900 is the orphan (ppid 1); 901's parent (900) is alive → live child.

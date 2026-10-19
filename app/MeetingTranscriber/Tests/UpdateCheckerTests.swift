@@ -237,7 +237,7 @@ final class UpdateCheckerTests: XCTestCase {
     func testFallbackToHTMLURLWhenNoDMG() {
         let info = makeRelease(tag: "v1.0.0", dmgURL: nil)
         XCTAssertNil(info.dmgURL)
-        XCTAssertEqual(info.htmlURL.absoluteString, "https://github.com/pasrom/meeting-transcriber/releases/tag/v1.0.0")
+        XCTAssertEqual(info.htmlURL.absoluteString, "https://github.com/Nourchkair/meeting-transcriber/releases/tag/v1.0.0")
     }
 
     // MARK: - Error Descriptions
@@ -294,7 +294,7 @@ final class UpdateCheckerTests: XCTestCase {
             name: "Release \(tag)",
             prerelease: prerelease,
             // swiftlint:disable:next force_unwrapping
-            htmlURL: URL(string: "https://github.com/pasrom/meeting-transcriber/releases/tag/\(tag)")!,
+            htmlURL: URL(string: "https://github.com/Nourchkair/meeting-transcriber/releases/tag/\(tag)")!,
             dmgURL: dmgURL,
         )
     }

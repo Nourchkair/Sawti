@@ -4,8 +4,8 @@ This register starts at the pinned Meeting Transcriber baseline. “Preserve” 
 
 | Existing capability / source boundary | Sawti disposition | Gate and evidence needed |
 |---|---|---|
-| Dual app-audio and microphone capture (`AudioCaptureSession`, `DualSourceRecorder`, `RecordingProvider`) | Preserve low-level mechanisms; begin helper extraction with an in-bundle command-line helper signed under the host's code-signing identifier; request TCC access from the host UI | Minimal mic-only helper/TCC/IPC feasibility passed in P0.4; G2 must still qualify app-audio capture, real meeting routes, faults and completeness |
-| Microphone-only and manual app capture (`MicCaptureHandler`, `AppTapSession`, `AppPickerView`) | Preserve; make mic-only first-class and retain manual picker as fallback | Alpha short-session proof; G2 on actual required devices |
+| Dual app-audio and microphone capture (`AudioCaptureSession`, `DualSourceRecorder`, `RecordingProvider`) | Preserve low-level mechanisms; mic-only sessions now use the in-bundle command-line helper signed under the shared Sawti host identity | Minimal mic-only helper/TCC/IPC feasibility passed in P0.4; Sawti bundle capture and app-audio meeting routes remain unverified and require Beta validation |
+| Microphone-only and manual app capture (`MicCaptureHandler`, `AppTapSession`, `AppPickerView`) | Mic-only helper routing is implemented; retain the manual app picker and existing host capture fallback | Automated route tests pass; live Sawti permission, audio completeness and spoken-marker checks remain required for Alpha; Beta still requires meeting-app capture validation |
 | Native Teams/Zoom and Chromium/WebRTC meeting detection | Preserve implementations and consent; auto-monitoring remains off until explicit opt-in and safe lifecycle are qualified | G2 detector/consent matrix; P7 route-specific claims |
 | Optional app-activity microphone monitoring | Preserve code and controls; do not silently remove applications | Validate each enabled detector and permission; no new detector work on core path |
 | Imported audio/video and paired-track formats | Preserve decoder/import paths; copy original bytes before any derived processing | G3 coverage plus G4 copy-only ownership/error tests |
@@ -17,7 +17,7 @@ This register starts at the pinned Meeting Transcriber baseline. “Preserve” 
 | Claude CLI / OpenAI-compatible provider generation | Keep source where license/build graph permits; provider-free default composition; no content is sent in core workflow | Any future enabled provider must pass its full local-content threat review and UI consent; no paid provider is required by 1.0 |
 | Debug/automation HTTP server and `mt-cli` | Preserve developer tooling source; unavailable in product core; no external AcademiaOS connection | Full API surface review and auth/limits tests before any production listener can be exposed |
 | Update checker, Homebrew casks and release workflows | Reconfigure for Sawti-owned identity/destinations before release; upstream targets remain disabled | P0.2 identity and P7 package/license/signature gates |
-| Transcript text/Markdown generation | Preserve formatters as export adapters; create immutable raw transcript/run storage independently | Alpha full-text export and G3 round-trip/source-hash checks |
+| Transcript text/Markdown generation | Preserve formatters; original engine-returned segments are saved separately from normalized/diarized output; menu actions open both and export copies | Automated tests cover text preservation, retries, owner-only mode and export; live ASR accuracy and source/transcript validation remain required |
 
 ## Baseline defects and unresolved limits
 

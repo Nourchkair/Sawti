@@ -230,7 +230,7 @@ final class AppSettings {
 
     /// PoC: when on, mic-channel audio is also fed to a live `StreamingTranscriber`
     /// during recording. Partial / finalised captions are logged via os_log on
-    /// subsystem `com.meetingtranscriber`, category `LiveTranscription` — no
+    /// subsystem `com.nourchkair.sawti`, category `LiveTranscription` — no
     /// caption-bar UI yet. Only effective when the active engine is Parakeet;
     /// other engines silently no-op. Default: off.
     var liveTranscriptionEnabled: Bool {
@@ -524,7 +524,7 @@ final class AppSettings {
     }
 
     /// Where output goes when no folder is chosen or the chosen one cannot be
-    /// reached: `~/Downloads/MeetingTranscriber` in production. Injected, like
+    /// reached: `~/Downloads/Sawti` in production. Injected, like
     /// `defaults`, so a test can exercise the fallback without resolving to the
     /// user's real Downloads folder, which is one step from writing into it.
     let defaultOutputDir: URL
@@ -536,8 +536,8 @@ final class AppSettings {
     /// (segment counts, input RMS, sample-rate validation), VAD (segment
     /// boundaries, round-trip checks), diarization, speaker matching
     /// (top-2 candidates + margins), and protocol generation. Off by
-    /// default. Logs go to `com.meetingtranscriber` and
-    /// `com.meetingtranscriber.audiotap`. Use the "Export Diagnostics"
+    /// default. Logs go to `com.nourchkair.sawti` and the retained AudioTapLib
+    /// subsystem. Use the "Export Diagnostics"
     /// button in Settings → Advanced to attach a log to a bug report.
     var verboseDiagnostics: Bool {
         didSet { defaults.set(verboseDiagnostics, forKey: "verboseDiagnostics") }
@@ -603,7 +603,9 @@ final class AppSettings {
             .flatMap(TranscriptionEngineSetting.init(rawValue:))) ?? .whisperKit
         whisperKitModel = defaults.object(forKey: "whisperKitModel") as? String
             ?? "openai_whisper-large-v3-v20240930_turbo"
-        whisperLanguage = defaults.object(forKey: "whisperLanguage") as? String ?? "de"
+        // Auto-detect is a safer default for Sawti's multilingual use than the
+        // upstream German-only default. A user can still pin a language.
+        whisperLanguage = defaults.object(forKey: "whisperLanguage") as? String ?? ""
         parakeetLanguage = defaults.object(forKey: "parakeetLanguage") as? String ?? ""
         customVocabularyPath = defaults.string(forKey: "customVocabularyPath") ?? ""
         customVocabularyBookmark = defaults.data(forKey: "customVocabularyBookmark")
@@ -628,12 +630,14 @@ final class AppSettings {
         let storedProvider = defaults.string(forKey: "protocolProvider")
             .flatMap(ProtocolProvider.init(rawValue:))
         #if APPSTORE
-            protocolProvider = storedProvider ?? .openAICompatible
+            protocolProvider = storedProvider ?? .none
         #else
-            protocolProvider = storedProvider ?? .claudeCLI
+            // Sawti's core workflow never sends transcripts to a summarizer.
+            // The existing providers remain available as an explicit opt-in.
+            protocolProvider = storedProvider ?? .none
             claudeBin = defaults.object(forKey: "claudeBin") as? String ?? "claude"
         #endif
-        protocolLanguage = defaults.string(forKey: "protocolLanguage") ?? "German"
+        protocolLanguage = defaults.string(forKey: "protocolLanguage") ?? "English"
         includeFullTranscriptInProtocol = defaults.object(forKey: "includeFullTranscriptInProtocol") as? Bool ?? true
         saveRawTranscriptSeparately = defaults.object(forKey: "saveRawTranscriptSeparately") as? Bool ?? true
 
@@ -661,7 +665,9 @@ final class AppSettings {
         #if !APPSTORE
             debugRPCEnabled = defaults.object(forKey: "debugRPCEnabled") as? Bool ?? false
         #endif
-        checkForUpdates = defaults.object(forKey: "checkForUpdates") as? Bool ?? true
+        // Alpha runs without update checks by default so its core can be
+        // exercised offline and does not make an unsolicited network request.
+        checkForUpdates = defaults.object(forKey: "checkForUpdates") as? Bool ?? false
         includePreReleases = defaults.object(forKey: "includePreReleases") as? Bool ?? false
         refreshCustomVocabularyValidation()
     }
