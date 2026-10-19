@@ -13,8 +13,8 @@ final class AppSettingsTests: XCTestCase {
     // swiftlint:disable:next implicitly_unwrapped_optional
     private var apiKeyAccount: String!
 
-    /// Each test gets its own volatile `UserDefaults(suiteName:)` so
-    /// `swift test --parallel` doesn't race on the shared on-disk plist.
+    /// Each test gets its own process-local defaults domain, so parallel test
+    /// workers cannot race on the host preferences store.
     /// AppSettings receives the suite via constructor injection.
     ///
     /// The Keychain account backing `openAIAPIKey` is injected the same way,
@@ -29,7 +29,7 @@ final class AppSettingsTests: XCTestCase {
         super.setUp()
         testSuiteName = "AppSettingsTests-\(getpid())-\(UUID().uuidString)"
         apiKeyAccount = "AppSettingsTests-openAIAPIKey-\(getpid())-\(UUID().uuidString)"
-        guard let suite = UserDefaults(suiteName: testSuiteName) else {
+        guard let suite = DefaultsSuite.make(testSuiteName) else {
             XCTFail("Could not create test UserDefaults suite")
             return
         }
@@ -449,7 +449,7 @@ final class AppSettingsTests: XCTestCase {
 
     func test_verboseDiagnostics_migratesFromLegacyAudioDebugLoggingKey() {
         let suiteName = "AppSettingsTests-migration-\(UUID().uuidString)"
-        guard let suite = UserDefaults(suiteName: suiteName) else {
+        guard let suite = DefaultsSuite.make(suiteName) else {
             XCTFail("Could not create suite")
             return
         }
@@ -464,7 +464,7 @@ final class AppSettingsTests: XCTestCase {
 
     func test_verboseDiagnostics_newKeyTakesPrecedenceOverLegacy() {
         let suiteName = "AppSettingsTests-precedence-\(UUID().uuidString)"
-        guard let suite = UserDefaults(suiteName: suiteName) else {
+        guard let suite = DefaultsSuite.make(suiteName) else {
             XCTFail("Could not create suite")
             return
         }
@@ -479,7 +479,7 @@ final class AppSettingsTests: XCTestCase {
 
     func test_verboseDiagnostics_migrationRemovesLegacyKey() {
         let suiteName = "AppSettingsTests-cleanup-\(UUID().uuidString)"
-        guard let suite = UserDefaults(suiteName: suiteName) else {
+        guard let suite = DefaultsSuite.make(suiteName) else {
             XCTFail("Could not create suite")
             return
         }

@@ -97,13 +97,13 @@ final class LegacyDefaultsMigrationTests: XCTestCase {
         XCTAssertEqual(merged["micName"] as? String, "Me")
     }
 
-    // MARK: - end to end against real defaults domains
+    // MARK: - end to end against named defaults domains
 
     func testRunCopiesAcrossDomainsAndIsIdempotent() throws {
         let legacyName = "app.meetingtranscriber.test.legacy.\(UUID().uuidString)"
         let currentName = "app.meetingtranscriber.test.current.\(UUID().uuidString)"
-        let legacy = try XCTUnwrap(UserDefaults(suiteName: legacyName))
-        let current = try XCTUnwrap(UserDefaults(suiteName: currentName))
+        let legacy = try XCTUnwrap(DefaultsSuite.make(legacyName))
+        let current = try XCTUnwrap(DefaultsSuite.make(currentName))
         defer {
             DefaultsSuite.remove(legacyName)
             DefaultsSuite.remove(currentName)

@@ -98,7 +98,7 @@ final class OutputSettingsViewTests: XCTestCase {
     private func makeIsolatedDefaults() -> UserDefaults {
         let suite = "OutputSettingsViewTests-\(getpid())-\(UUID().uuidString)"
         addTeardownBlock { DefaultsSuite.remove(suite) }
-        guard let defaults = UserDefaults(suiteName: suite) else {
+        guard let defaults = DefaultsSuite.make(suite) else {
             fatalError("Could not create test UserDefaults suite")
         }
         return defaults

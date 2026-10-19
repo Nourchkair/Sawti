@@ -102,8 +102,8 @@ enum ProtocolProvider: String, CaseIterable {
 @Observable
 final class AppSettings {
     /// Backing store. Production callers pass nothing → `.standard`. Tests
-    /// inject their own `UserDefaults(suiteName:)` so parallel test
-    /// processes don't race on the shared on-disk plist.
+    /// inject a process-local defaults implementation so they never write to
+    /// the host's preferences store.
     @ObservationIgnored private let defaults: UserDefaults
 
     /// Keychain account backing `openAIAPIKey`. Production callers pass

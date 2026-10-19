@@ -583,8 +583,8 @@ actor MockEouManager: EouStreamingAsrManaging {
 }
 
 extension XCTestCase {
-    /// Build an `AppState` over a per-call unique, volatile `UserDefaults` suite
-    /// that is torn down after the test. Shared by the RPC-snapshot test classes
+    /// Build an `AppState` over a per-call unique, process-local defaults domain
+    /// that is cleared after the test. Shared by the RPC-snapshot test classes
     /// (`RPCBadgeStateTests`, `RPCUpdateStatusTests`, `RPCManualRecordingStateTests`,
     /// …) to exercise `rpcStateSnapshot()` without touching the real defaults
     /// domain or leaking a preference domain across runs. Captures only the
@@ -592,7 +592,7 @@ extension XCTestCase {
     @MainActor
     func makeRPCTestState() -> AppState {
         let suite = "RPCTestState-\(getpid())-\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suite) else {
+        guard let defaults = DefaultsSuite.make(suite) else {
             fatalError("Could not create test UserDefaults suite")
         }
         addTeardownBlock { DefaultsSuite.remove(suite) }

@@ -9,14 +9,12 @@ final class SettingsViewTests: XCTestCase { // swiftlint:disable:this type_body_
     // swiftlint:disable:next implicitly_unwrapped_optional
     private var testSuiteName: String!
 
-    /// Per-test isolated UserDefaults suite — same pattern as AppSettingsTests.
-    /// Avoids `swift test --parallel` plist races AND prevents test pollution
-    /// from leaking into the dev app's `.standard` plist when a test process
-    /// is killed before tearDown runs.
+    /// Per-test process-local defaults domain — same pattern as AppSettingsTests.
+    /// It stays isolated even when a test process is killed before tearDown.
     override func setUp() async throws {
         try await super.setUp()
         testSuiteName = "SettingsViewTests-\(getpid())-\(UUID().uuidString)"
-        guard let suite = UserDefaults(suiteName: testSuiteName) else {
+        guard let suite = DefaultsSuite.make(testSuiteName) else {
             XCTFail("Could not create test UserDefaults suite")
             return
         }

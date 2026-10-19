@@ -255,7 +255,7 @@ final class MicInputDetectorTests: XCTestCase {
         func detector(customApps: [String]) throws -> MicInputDetector {
             let suite = "CustomWatchWiring-\(getpid())-\(UUID().uuidString)"
             addTeardownBlock { DefaultsSuite.remove(suite) }
-            let settings = try AppSettings(defaults: XCTUnwrap(UserDefaults(suiteName: suite)))
+            let settings = try AppSettings(defaults: XCTUnwrap(DefaultsSuite.make(suite)))
             settings.watchCustomApps = customApps
             let mic = try XCTUnwrap(
                 WatchingController.defaultDetectors(settings: settings)

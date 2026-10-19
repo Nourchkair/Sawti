@@ -17,10 +17,10 @@ final class SettingsInteractionTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        // Isolated per-test suite (pid+uuid) so a killed test never leaks into the
-        // dev app's `.standard` plist — mirrors SettingsViewTests.
+        // Isolated per-test domain (pid+uuid), held only in the test process —
+        // mirrors SettingsViewTests.
         suiteName = "SettingsInteractionTests-\(getpid())-\(UUID().uuidString)"
-        guard let suite = UserDefaults(suiteName: suiteName) else {
+        guard let suite = DefaultsSuite.make(suiteName) else {
             XCTFail("could not create test UserDefaults suite")
             return
         }

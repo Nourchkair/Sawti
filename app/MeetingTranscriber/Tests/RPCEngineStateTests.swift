@@ -17,7 +17,7 @@
         override func setUp() async throws {
             try await super.setUp()
             testSuiteName = "RPCEngineStateTests-\(getpid())-\(UUID().uuidString)"
-            guard let suite = UserDefaults(suiteName: testSuiteName) else {
+            guard let suite = DefaultsSuite.make(testSuiteName) else {
                 XCTFail("Could not create test UserDefaults suite")
                 return
             }
