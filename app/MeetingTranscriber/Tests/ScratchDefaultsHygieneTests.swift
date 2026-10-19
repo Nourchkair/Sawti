@@ -1,34 +1,33 @@
 import XCTest
 
-/// Guards the one thing about a scratch `UserDefaults` suite that is easy to get
-/// wrong: emptying the domain is not the same as removing it.
-///
-/// `removePersistentDomain(forName:)` clears the keys but leaves the suite's
-/// backing file in `~/Library/Preferences`, so a suite per test leaves one empty
-/// plist per test behind on every run, for good. `DefaultsSuite` owns both
-/// halves, and the second one cannot happen here: `cfprefsd` rewrites the file
-/// seconds after the process exits, so `remove` records the name and a later run
-/// unlinks it. `DefaultsSuite` carries the measurements behind that.
-///
-/// This is a source scan rather than a behavioural test on purpose, and the
-/// timing above is why. What it guards against lands in the home directory
-/// rather than in anything the process can observe about itself, it lands after
-/// the process that caused it is gone, and a test that counted files there would
-/// be counting every other test running beside it under `--parallel`.
+/// Guards the test-only defaults boundary. Tests need isolated named domains,
+/// while production defaults must stay outside this factory and no test may
+/// construct a disk-backed suite directly.
 final class ScratchDefaultsHygieneTests: XCTestCase {
-    /// Every suite a file makes must be matched by a cleanup call, and naming
-    /// `removePersistentDomain` directly is the bug this guards.
-    ///
-    /// Counted rather than merely looked for. A file that cleans up one suite
-    /// and then grows a second one with no teardown is the case this most needs
-    /// to catch, and asking only whether the helper appears somewhere in the
-    /// file lets exactly that through: it is how a suite in
-    /// `DebugRPCServerIntegrationTests` stayed uncovered while the file read as
-    /// compliant.
-    ///
-    /// Cleanups may legitimately outnumber suites, since one call can serve a
-    /// factory used by several tests, so this is a floor and not an equality.
-    func testEverySuiteAFileMakesHasAMatchingCleanup() throws {
+    func testNamedDomainsAreSharedByNameAndIsolatedFromEachOther() throws {
+        let firstName = "app.meetingtranscriber.test.defaults.first.\(UUID().uuidString)"
+        let secondName = "app.meetingtranscriber.test.defaults.second.\(UUID().uuidString)"
+        defer {
+            DefaultsSuite.remove(firstName)
+            DefaultsSuite.remove(secondName)
+        }
+
+        let first = try XCTUnwrap(DefaultsSuite.make(firstName))
+        let sameDomain = try XCTUnwrap(DefaultsSuite.make(firstName))
+        let second = try XCTUnwrap(DefaultsSuite.make(secondName))
+
+        first.set("de", forKey: "language")
+        first.set(true, forKey: "autoWatch")
+
+        XCTAssertEqual(sameDomain.string(forKey: "language"), "de")
+        XCTAssertTrue(sameDomain.bool(forKey: "autoWatch"))
+        XCTAssertNil(second.object(forKey: "language"))
+
+        DefaultsSuite.remove(firstName)
+        XCTAssertNil(sameDomain.object(forKey: "language"))
+    }
+
+    func testEveryNamedDomainUsesTheMemoryFactoryAndHasCleanup() throws {
         var offenders: [String] = []
 
         for (name, source) in try testSources() {
@@ -36,21 +35,20 @@ final class ScratchDefaultsHygieneTests: XCTestCase {
                 .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             let code = lines.joined(separator: "\n")
 
-            let suites = code.ranges(of: Self.suiteFactory).count
-            let cleanups = code.ranges(of: Self.helperCall).count
-                + code.ranges(of: Self.settledHelperCall).count
+            let suites = code.ranges(of: Self.memoryFactory).count
+            let cleanups = code.ranges(of: Self.cleanupHelper).count
             if suites > cleanups {
                 offenders.append("\(name): makes \(suites) suite(s), cleans up \(cleanups)")
             }
-            if code.contains(Self.rawTeardown) {
-                offenders.append("\(name): calls \(Self.rawTeardown) directly, which leaves the file")
+            if code.contains(Self.directSuiteFactory) {
+                offenders.append("\(name): constructs a disk-backed UserDefaults suite directly")
             }
         }
 
         XCTAssertEqual(
             offenders, [],
-            "A scratch suite has to be handed to \(Self.helperCall), which empties the domain now and "
-                + "leaves the file for a later run to unlink. \(offenders.count) place(s) do not:\n"
+            "Named test defaults must use the in-memory factory and be cleared during teardown. "
+                + "\(offenders.count) place(s) do not:\n"
                 + offenders.joined(separator: "\n"),
         )
     }
@@ -58,10 +56,9 @@ final class ScratchDefaultsHygieneTests: XCTestCase {
     // MARK: - Needles
 
     /// Built from pieces so this file does not match its own scan.
-    private static let suiteFactory = "UserDefaults(suiteName" + ":"
-    private static let helperCall = "DefaultsSuite" + ".remove("
-    private static let settledHelperCall = "DefaultsSuite" + ".removeSettled("
-    private static let rawTeardown = "removePersistent" + "Domain"
+    private static let directSuiteFactory = "UserDefaults(suiteName" + ":"
+    private static let memoryFactory = "DefaultsSuite" + ".make("
+    private static let cleanupHelper = "DefaultsSuite" + ".remove("
 
     // MARK: - Sources
 
@@ -73,8 +70,9 @@ final class ScratchDefaultsHygieneTests: XCTestCase {
         let dir = ownPath.deletingLastPathComponent()
         let all = try FileManager.default.subpathsOfDirectory(atPath: dir.path)
 
-        // The helper is the one place the raw call belongs, and this file names
-        // both needles in its own text, so neither can scan itself.
+        // The factory is the one place that calls UserDefaults(suiteName:),
+        // and this file names the needles in its own text, so neither scan can
+        // match itself.
         let exempt = [ownPath.lastPathComponent, "DefaultsSuite.swift"]
         let sources = all.filter { path in
             path.hasSuffix(".swift") && !exempt.contains(URL(fileURLWithPath: path).lastPathComponent)
