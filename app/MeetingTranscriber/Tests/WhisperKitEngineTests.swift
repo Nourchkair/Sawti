@@ -86,6 +86,7 @@ final class WhisperKitEngineTests: XCTestCase {
 
     /// Integration test: downloads whisper-small model and transcribes a German audio fixture.
     func testTranscribeGermanAudio() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("loads or downloads a WhisperKit model")
         let fixture = fixtureURL()
 
         XCTAssertTrue(
@@ -132,6 +133,7 @@ final class WhisperKitEngineTests: XCTestCase {
     /// actually produces text on real audio (not just routes through the
     /// type system).
     func testTranscribeSamplesGermanAudio() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("loads or downloads a WhisperKit model")
         let fixture = fixtureURL()
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.path))
 

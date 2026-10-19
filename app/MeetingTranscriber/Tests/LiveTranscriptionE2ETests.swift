@@ -11,11 +11,10 @@ import XCTest
 /// reason a sibling live-recording E2E (`scripts/e2e-live-captions.sh`)
 /// exists.
 ///
-/// Runs in regular CI (no `E2E_ENABLED` gate) so codecov sees the
+/// Runs in regular CI with its pre-warmed model cache so codecov sees the
 /// `StreamingTranscriber` + `LiveTranscriptionController` + engine
-/// streaming paths. The Parakeet model is already preloaded by
-/// `ModelPreloadTests`, so the additional wall-clock is just the
-/// fixture playback (~10 s end-to-end).
+/// streaming paths. The disposable-home local test wrapper skips this unless
+/// `E2E_ENABLED=1`, so ordinary development tests never fetch the model.
 ///
 /// Acceptance principle (matches the existing channel-health E2E): revert
 /// any production wiring commit on this branch and one of these tests
@@ -42,6 +41,7 @@ final class LiveTranscriptionE2ETests: XCTestCase {
     ///   * revert `bd46cdb` (app-channel live transcription) → app path fails
     ///   * revert `c2dcc35` (FluidVAD streaming API) → both fail
     func testLivePipelineProducesFinalisedCaptionsAcrossChannels() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("requires real Parakeet and Silero VAD models")
         let setup = try await loadFixtureAndPrepareController()
 
         // (1) Idle precondition: with the controller wired up but no

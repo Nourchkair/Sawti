@@ -38,7 +38,8 @@ final class ParakeetEngineTests: XCTestCase {
 
     // MARK: - Transcription Errors
 
-    func testTranscribeSegmentsThrowsForNonexistentFile() async {
+    func testTranscribeSegmentsThrowsForNonexistentFile() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("transcription initializes the Parakeet model")
         let engine = ParakeetEngine()
         let dummyURL = URL(fileURLWithPath: "/tmp/nonexistent_\(UUID()).wav")
 
@@ -57,7 +58,8 @@ final class ParakeetEngineTests: XCTestCase {
 
     // MARK: - Load Model State Transitions
 
-    func testLoadModelTransitionsToLoaded() async {
+    func testLoadModelTransitionsToLoaded() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("loads or downloads the Parakeet model")
         let engine = ParakeetEngine()
         XCTAssertEqual(engine.modelState, .unloaded, "Pre-condition: model starts unloaded")
 
@@ -72,7 +74,8 @@ final class ParakeetEngineTests: XCTestCase {
         )
     }
 
-    func testDownloadProgressAfterLoad() async {
+    func testDownloadProgressAfterLoad() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("loads or downloads the Parakeet model")
         let engine = ParakeetEngine()
 
         await engine.loadModel()
@@ -85,7 +88,8 @@ final class ParakeetEngineTests: XCTestCase {
         }
     }
 
-    func testLoadModelDeduplicatesConcurrentCalls() async {
+    func testLoadModelDeduplicatesConcurrentCalls() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("loads or downloads the Parakeet model")
         let engine = ParakeetEngine()
 
         // Start two concurrent loads — second should await the first, not start a new download

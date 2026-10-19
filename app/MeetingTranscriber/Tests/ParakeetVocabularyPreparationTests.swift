@@ -102,6 +102,7 @@ final class ParakeetVocabularyPreparationTests: XCTestCase {
     }
 
     func testModelLoadDoesNotPrepareVocabulary() async throws {
+        try skipIfIsolatedModelRunWithoutOptIn("loads or downloads the Parakeet model")
         let vocabularyFile = try makeVocabularyFile(contents: "Northstar\n")
         defer { try? FileManager.default.removeItem(at: vocabularyFile) }
 
