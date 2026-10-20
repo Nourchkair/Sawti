@@ -11,29 +11,36 @@ extension Notification.Name {
     static let closeSettings = Notification.Name("closeSettings")
 }
 
-/// The popover observes AppState directly, while its builder reuses the
-/// existing menu view and its callbacks. AppKit owns the status-item lifetime;
-/// SwiftUI still renders the menu and all of its existing controls.
-@MainActor
-private struct MenuBarPopoverRoot<Content: View>: View {
-    @Bindable var appState: AppState
-    @ViewBuilder let content: () -> Content
+/// Renders the menu-bar icon and advances its animation independently of the
+/// surrounding app scenes. SwiftUI's native MenuBarExtra owns the status item
+/// and click/popover lifecycle; this view supplies its current visual state.
+private struct AnimatedMenuBarIcon: View {
+    let badge: BadgeKind
+    let permissionOverlay: Bool
+    let recordOnlyOverlay: Bool
+    let micSilentOverlay: Bool
+    let appSilentOverlay: Bool
+
+    @State private var animationFrame = 0
+    private let iconTimer = Timer.publish(
+        every: 0.4, on: .main, in: MenuBarIcon.animationRunLoopMode,
+    ).autoconnect()
 
     var body: some View {
-        // These reads keep changes in the state-derived menu snapshot visible
-        // to the builder even though the status item itself is AppKit-owned.
-        let _ = appState.currentBadge
-        let _ = appState.currentStateLabel
-        let _ = appState.isWatching
-        let _ = appState.pipelineQueue.jobs.count
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                content()
+        Image(nsImage: MenuBarIcon.image(
+            badge: badge,
+            animationFrame: animationFrame,
+            permissionOverlay: permissionOverlay,
+            recordOnlyOverlay: recordOnlyOverlay,
+            micSilentOverlay: micSilentOverlay,
+            appSilentOverlay: appSilentOverlay,
+        ))
+        .onReceive(iconTimer) { _ in
+            let next = MenuBarIcon.nextFrame(animationFrame, badge: badge)
+            if next != animationFrame {
+                animationFrame = next
             }
-            .padding(14)
         }
-        .frame(width: 380, height: 600)
     }
 }
 
@@ -108,10 +115,11 @@ struct MeetingTranscriberApp: App {
     // the same closures at the same moment, so `@Observable` records the same
     // reads, and the scene order, window ids and modifiers are unchanged.
     var body: some Scene {
-        let _ = applicationDelegate.installStatusItem(
-            state: appState,
-            rootView: AnyView(menuBarPopoverContent),
-        )
+        MenuBarExtra {
+            menuBarContent
+        } label: {
+            menuBarLabel
+        }
 
         speakerNamingWindow
         settingsWindow
@@ -154,10 +162,16 @@ struct MeetingTranscriberApp: App {
         )
     }
 
-    private var menuBarPopoverContent: some View {
-        MenuBarPopoverRoot(appState: appState) {
-            menuBarContent
-        }
+    private var menuBarLabel: some View {
+        AnimatedMenuBarIcon(
+            badge: appState.currentBadge,
+            permissionOverlay: appState.hasPermissionProblem,
+            recordOnlyOverlay: appState.settings.recordOnly,
+            micSilentOverlay: appState.micSilentOverlay,
+            appSilentOverlay: appState.appSilentOverlay,
+        )
+        .accessibilityLabel("Sawti — \(appState.currentStateLabel)")
+        .help("Sawti — \(appState.currentStateLabel)")
         .onReceive(NotificationCenter.default.publisher(for: .autoWatchStart)) { _ in
             if !appState.isWatching {
                 appState.watching.toggleWatching(userInitiated: false)
@@ -180,6 +194,13 @@ struct MeetingTranscriberApp: App {
         }
         .task {
             await appState.permissions.check()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Re-check after returning from System Settings without repeatedly
+            // probing the microphone on rapid application switches.
+            Task { @MainActor in
+                await appState.permissions.check(minimumInterval: 3)
+            }
         }
         .onChange(of: appState.shouldShowLiveCaptions, initial: true) { _, visible in
             let controller = captionsWindow ?? LiveCaptionsWindowController(
@@ -390,6 +411,7 @@ struct MeetingTranscriberApp: App {
 
     private func quit() {
         appState.watching.watchLoop?.stop()
+        applicationDelegate.allowUserRequestedTermination()
         NSApplication.shared.terminate(nil)
     }
 

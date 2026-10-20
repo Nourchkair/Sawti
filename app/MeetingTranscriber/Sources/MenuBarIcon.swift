@@ -93,6 +93,10 @@ enum MenuBarIcon {
         let url = Bundle.main.url(forResource: "SawtiLogo", withExtension: "png")
             ?? Bundle.module.url(forResource: "SawtiLogo", withExtension: "png")
         guard let url, let image = NSImage(contentsOf: url) else { return nil }
+        // The source PNG is 1254 px square. Keep its full-resolution bitmap but
+        // give AppKit the status-bar point size so the original template image
+        // can be assigned directly to NSStatusItem.button.image.
+        image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
         return image
     }()
@@ -142,6 +146,15 @@ enum MenuBarIcon {
         micSilentOverlay: Bool = false,
         appSilentOverlay: Bool = false,
     ) -> NSImage {
+        let hasOverlay = permissionOverlay || recordOnlyOverlay || micSilentOverlay || appSilentOverlay
+        if badge == .inactive, !hasOverlay, let officialLogo {
+            // Let AppKit tint the original alpha-mask PNG as a native template
+            // image. Rasterizing a template into another NSImage first can
+            // leave a black-on-transparent composite that is invisible in the
+            // dark menu bar on some macOS builds.
+            return officialLogo
+        }
+
         if permissionOverlay || recordOnlyOverlay || micSilentOverlay || appSilentOverlay {
             // Honour the cache's frame discipline: animated badges advance, static ones
             // stay on frame 0. Without this, the live animationFrame leaks through and
@@ -186,25 +199,27 @@ enum MenuBarIcon {
         let isDark = NSApp?.effectiveAppearance
             .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let image = NSImage(size: size, flipped: false) { rect in
+            let explicitForeground = isDark ? NSColor.white : NSColor.black
             if needsExplicitForeground {
-                (isDark ? NSColor.white : NSColor.black).setFill()
+                explicitForeground.setFill()
             } else {
                 NSColor.black.setFill()
             }
 
-            drawBadgeBody(badge: badge, in: rect, frame: frame)
+            let logoForeground = needsExplicitForeground ? explicitForeground : nil
+            drawBadgeBody(badge: badge, in: rect, frame: frame, logoForeground: logoForeground)
 
             // Tint halves AFTER the base body is drawn. Clipping to the upper /
             // lower half + repainting the same body with red fill overlays the
             // tint without altering bar geometry — clean per-channel signal.
             if micSilentOverlay {
                 drawTintedHalf(in: rect, half: .top) {
-                    drawBadgeBody(badge: badge, in: rect, frame: frame)
+                    drawBadgeBody(badge: badge, in: rect, frame: frame, logoForeground: logoForeground)
                 }
             }
             if appSilentOverlay {
                 drawTintedHalf(in: rect, half: .bottom) {
-                    drawBadgeBody(badge: badge, in: rect, frame: frame)
+                    drawBadgeBody(badge: badge, in: rect, frame: frame, logoForeground: logoForeground)
                 }
             }
 
@@ -224,10 +239,15 @@ enum MenuBarIcon {
 
     /// Single dispatch for the badge's main body shape. Extracted so the
     /// per-half tint pass can re-draw the same body under a clip rect.
-    private static func drawBadgeBody(badge: BadgeKind, in rect: NSRect, frame: Int) {
+    private static func drawBadgeBody(
+        badge: BadgeKind,
+        in rect: NSRect,
+        frame: Int,
+        logoForeground: NSColor? = nil,
+    ) {
         switch badge {
         case .inactive:
-            drawSawtiLogo(in: rect)
+            drawSawtiLogo(in: rect, foreground: logoForeground)
 
         case .transcribing:
             drawTranscribingAnimation(in: rect, frame: frame)
@@ -253,7 +273,7 @@ enum MenuBarIcon {
     /// Idle uses the official logo as a template so macOS adapts it to the
     /// current menu-bar appearance. If packaging is incomplete, keep the
     /// previous static waveform visible rather than showing a blank item.
-    private static func drawSawtiLogo(in rect: NSRect) {
+    private static func drawSawtiLogo(in rect: NSRect, foreground: NSColor? = nil) {
         guard let officialLogo else {
             drawRecordingAnimation(in: rect, frame: 0)
             return
@@ -264,6 +284,17 @@ enum MenuBarIcon {
             operation: .sourceOver,
             fraction: 1,
         )
+        if let foreground, let context = NSGraphicsContext.current {
+            // Preserve the logo's alpha silhouette while recoloring its pixels
+            // for a non-template image (for example, when a red permission
+            // badge is composited over it).
+            let cgContext = context.cgContext
+            cgContext.saveGState()
+            cgContext.setBlendMode(.sourceAtop)
+            cgContext.setFillColor(foreground.cgColor)
+            cgContext.fill(rect)
+            cgContext.restoreGState()
+        }
     }
 
     private enum Half { case top, bottom }
