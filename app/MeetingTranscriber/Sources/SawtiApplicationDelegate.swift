@@ -17,13 +17,7 @@ final class SawtiApplicationDelegate: NSObject, NSApplicationDelegate {
     private var iconTimer: Timer?
     private var lastRenderedBadge: BadgeKind?
     private var animationFrame = 0
-
-    override init() {
-        super.init()
-        // Create this outside SwiftUI's scene lifecycle so it stays alive with
-        // the menu-bar-only app even when no regular window is open.
-        installStatusButton()
-    }
+    private var didFinishLaunching = false
 
     /// Installs the native menu-bar item once, retaining the existing SwiftUI
     /// controls in a popover. The icon itself is updated from AppState so the
@@ -45,6 +39,13 @@ final class SawtiApplicationDelegate: NSObject, NSApplicationDelegate {
             _ = host.view
         }
 
+        // Keep status-bar installation on the post-launch side of AppKit's
+        // lifecycle. SwiftUI may evaluate this scene body before
+        // NSApplication finishes launching, so defer the one-time install.
+        if didFinishLaunching {
+            installStatusButton()
+        }
+
         if iconTimer == nil {
             iconTimer = Timer.scheduledTimer(
                 timeInterval: 0.4,
@@ -55,6 +56,13 @@ final class SawtiApplicationDelegate: NSObject, NSApplicationDelegate {
             )
         }
         refreshStatusItemIcon()
+    }
+
+    func applicationDidFinishLaunching(_: Notification) {
+        didFinishLaunching = true
+        installStatusButton()
+        refreshStatusItemIcon()
+        logger.info("Sawti finished launching with menu-bar item installed")
     }
 
     private func installStatusButton() {
