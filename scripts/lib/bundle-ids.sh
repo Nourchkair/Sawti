@@ -20,9 +20,13 @@ RELEASE_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
     "$_BUNDLE_IDS_ROOT/app/MeetingTranscriber/Sources/Info.plist")"
 
 # The dev build carries its own identity so it never shares TCC grants,
-# settings or a notification registration with an installed release. Derived
-# from the release identifier so the two can only ever move together.
-DEV_BUNDLE_ID="$RELEASE_BUNDLE_ID.dev"
+# settings or a notification registration with an installed release. macOS 26
+# Control Center can retain a stale cross-app block for a menu-bar item even
+# after its allow-list switch and Control Center reset; use a fresh dev identity
+# to escape the stale record. LegacyDefaultsMigration carries settings forward
+# from the previous .dev identity. Keep this derived from the release identifier
+# so the two can only ever move together.
+DEV_BUNDLE_ID="$RELEASE_BUNDLE_ID.dev2"
 
 # `defaults write <id>` from outside a running app can be redirected into the
 # app's container, so callers that read a dev default back have to check both

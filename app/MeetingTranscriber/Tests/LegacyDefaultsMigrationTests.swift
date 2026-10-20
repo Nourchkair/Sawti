@@ -55,6 +55,10 @@ final class LegacyDefaultsMigrationTests: XCTestCase {
             LegacyDefaultsMigration.legacyDomain(for: "app.meetingtranscriber.dev"),
             "com.meetingtranscriber.dev",
         )
+        XCTAssertEqual(
+            LegacyDefaultsMigration.legacyDomain(for: "com.nourchkair.sawti.dev2"),
+            "com.nourchkair.sawti.dev",
+        )
     }
 
     /// An identifier we never shipped under has nothing to carry over, and
