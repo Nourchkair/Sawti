@@ -57,10 +57,24 @@ swift build "${SWIFT_BUILD_FLAGS[@]}" --product SawtiCaptureHelper
 # feeds.
 # shellcheck source=lib/signing.sh
 source "$SCRIPT_DIR/lib/signing.sh"
+# Prefer this Sawti-only self-signed identity for local development when it is
+# present. It is intentionally not a trusted distribution identity, so the
+# generic valid-identity discovery below omits it; ad-hoc fallback would give
+# every rebuild a new TCC identity and invalidate macOS permission grants.
+if [ -z "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
+    SAWTI_KEYCHAIN="$HOME/Library/Keychains/SawtiCaptureProbe.keychain-db"
+    if [ -f "$SAWTI_KEYCHAIN" ]; then
+        SAWTI_DEV_SIGNING_IDENTITY="$(
+            security find-identity -p codesigning "$SAWTI_KEYCHAIN" 2>/dev/null \
+                | awk '$1 ~ /^[0-9]+[)]$/ && length($2) == 40 &&
+                       index($0, "Sawti Capture Probe Development") { print $2; exit }'
+        )"
+    fi
+fi
 choose_signing_identity "$APP_BUNDLE"
 if [ -n "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
     CHOSEN_IDENTITY="$SAWTI_DEV_SIGNING_IDENTITY"
-    CHOSEN_IDENTITY_REASON="selected explicit Sawti development identity"
+    CHOSEN_IDENTITY_REASON="selected Sawti development identity"
     CHOSEN_IDENTITY_LISTING="SHA-1 $CHOSEN_IDENTITY"
 fi
 
@@ -171,15 +185,15 @@ if [ -n "$SIGNING_IDENTITY" ]; then
         || { echo "codesign failed for $APP_BUNDLE (identity $SIGNING_IDENTITY, entitlements $SIGNING_ENTITLEMENTS)" >&2; exit 1; }
     echo "  Signed with: $SIGNING_IDENTITY (+ entitlements)"
 else
-    # Not fatal: a contributor without any certificate can still run the app.
-    # But not silent either. This used to die inside codesign by accident (the
-    # keychain's `0 valid identities found` trailer handed the word `valid`
-    # over as the identity), and an honest empty answer would otherwise pass
-    # without a word, leaving a bundle that loses every TCC grant at the next
-    # rebuild.
-    echo "  WARNING: no codesigning identity in the keychain; this bundle is not signed"
-    echo "  with a certificate. TCC binds its grants to that certificate, so without one"
-    echo "  no grant made to this build survives the next rebuild."
+    # Not fatal: a contributor without a certificate can still run the app.
+    # Always replace a prior bundle signature with a fresh ad-hoc signature;
+    # otherwise newly assembled resources and binaries can sit under an old
+    # CodeDirectory and fail strict verification or LaunchServices checks.
+    # Ad-hoc signing does not preserve TCC grants across rebuilds.
+    codesign --force --sign - --identifier "$DEV_BUNDLE_ID" \
+        --entitlements "$SIGNING_ENTITLEMENTS" "$APP_BUNDLE"
+    echo "  WARNING: no certificate identity is available; bundle is ad-hoc signed"
+    echo "  and microphone / screen-capture TCC grants may need to be re-authorized."
 fi
 verify_signing "$APP_BUNDLE"
 
