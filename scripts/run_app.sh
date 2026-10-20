@@ -68,6 +68,27 @@ fi
 mkdir -p "$APP_MACOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp "$SPM_DIR/Sources/Resources/SawtiLogo.png" "$APP_BUNDLE/Contents/Resources/SawtiLogo.png"
+# Info.plist names the AppIcon asset, so package the same ICNS that the release
+# bundle gets. Without it, Launchpad shows its generic placeholder even though
+# the menu-bar PNG is present.
+ICONSET_SRC="$SPM_DIR/Sources/Assets.xcassets/AppIcon.appiconset"
+if [ -d "$ICONSET_SRC" ]; then
+    ICONSET="$SPM_DIR/.build/AppIcon.iconset"
+    rm -rf "$ICONSET"
+    mkdir -p "$ICONSET"
+    cp "$ICONSET_SRC/icon_16x16.png"      "$ICONSET/icon_16x16.png"
+    cp "$ICONSET_SRC/icon_16x16@2x.png"   "$ICONSET/icon_16x16@2x.png"
+    cp "$ICONSET_SRC/icon_32x32.png"      "$ICONSET/icon_32x32.png"
+    cp "$ICONSET_SRC/icon_32x32@2x.png"   "$ICONSET/icon_32x32@2x.png"
+    cp "$ICONSET_SRC/icon_128x128.png"    "$ICONSET/icon_128x128.png"
+    cp "$ICONSET_SRC/icon_128x128@2x.png" "$ICONSET/icon_128x128@2x.png"
+    cp "$ICONSET_SRC/icon_256x256.png"    "$ICONSET/icon_256x256.png"
+    cp "$ICONSET_SRC/icon_256x256@2x.png" "$ICONSET/icon_256x256@2x.png"
+    cp "$ICONSET_SRC/icon_512x512.png"    "$ICONSET/icon_512x512.png"
+    cp "$ICONSET_SRC/icon_512x512@2x.png" "$ICONSET/icon_512x512@2x.png"
+    iconutil -c icns "$ICONSET" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+    rm -rf "$ICONSET"
+fi
 # Use the dev bundle identifier to keep permissions separate from release.
 cp "$INFO_PLIST" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $DEV_BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
