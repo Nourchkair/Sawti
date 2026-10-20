@@ -32,10 +32,10 @@ enum BadgeKind: String, CaseIterable, Codable {
     }
 }
 
-/// Composites a menu bar icon (waveform + optional badge overlay).
+/// Composites the Sawti menu bar icon with recording animation and optional badges.
 ///
-/// The base icon is a waveform (5 vertical bars). Depending on the badge kind,
-/// the waveform animates differently:
+/// Idle uses Sawti's official logo. Active work uses a waveform (5 vertical bars),
+/// which animates differently depending on the badge kind:
 /// - `.recording`: bars bounce like a live audio signal
 /// - `.transcribing`: bars morph into horizontal text lines (audio → text)
 /// - `.diarizing`: bars split into two groups (speaker separation)
@@ -207,19 +207,25 @@ enum MenuBarIcon {
             }
 
             let logoForeground = needsExplicitForeground ? explicitForeground : nil
-            drawBadgeBody(badge: badge, in: rect, frame: frame, logoForeground: logoForeground)
+            // Permission health is reported as `.error` while the recorder is
+            // otherwise idle. Keep the official Sawti mark in that state and
+            // let the red exclamation carry the warning; an actual recording
+            // or transcription error without a permission problem keeps the
+            // established waveform error icon.
+            let bodyBadge: BadgeKind = badge == .error && permissionOverlay ? .inactive : badge
+            drawBadgeBody(badge: bodyBadge, in: rect, frame: frame, logoForeground: logoForeground)
 
             // Tint halves AFTER the base body is drawn. Clipping to the upper /
             // lower half + repainting the same body with red fill overlays the
             // tint without altering bar geometry — clean per-channel signal.
             if micSilentOverlay {
                 drawTintedHalf(in: rect, half: .top) {
-                    drawBadgeBody(badge: badge, in: rect, frame: frame, logoForeground: logoForeground)
+                    drawBadgeBody(badge: bodyBadge, in: rect, frame: frame, logoForeground: logoForeground)
                 }
             }
             if appSilentOverlay {
                 drawTintedHalf(in: rect, half: .bottom) {
-                    drawBadgeBody(badge: badge, in: rect, frame: frame, logoForeground: logoForeground)
+                    drawBadgeBody(badge: bodyBadge, in: rect, frame: frame, logoForeground: logoForeground)
                 }
             }
 
