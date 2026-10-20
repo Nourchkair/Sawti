@@ -26,6 +26,10 @@ enum LegacyDefaultsMigration {
     private static let legacyDomains = [
         "app.meetingtranscriber": "com.meetingtranscriber.app",
         "app.meetingtranscriber.dev": "com.meetingtranscriber.dev",
+        // macOS 26 Control Center can keep a stale block attached to the old
+        // dev bundle ID. The fresh dev2 identity inherits the user's existing
+        // Sawti development preferences once, without touching recording data.
+        "com.nourchkair.sawti.dev2": "com.nourchkair.sawti.dev",
     ]
 
     /// The pre-rename domain for a current identifier, or nil when there is
