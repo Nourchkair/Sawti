@@ -43,7 +43,7 @@ while [ $# -gt 0 ]; do
             cat <<'HELP'
 Usage: e2e-browser.sh [--no-build] [--keep-app] [--keep-chrome] [--browser NAME] [--jitsi [--jitsi-host HOST]]
 
-  --no-build     Skip build/deploy/re-sign; use ~/Applications/MeetingTranscriber-Dev.app as-is.
+  --no-build     Skip build/deploy/re-sign; use ~/Applications/Sawti.app as-is.
   --keep-app     Leave the dev app running on exit (default: quit it).
   --keep-chrome  Leave the fixture browser instance open on exit (default: quit it).
   --browser      Which Chromium browser to drive: chrome (default), brave, edge, chromium.
@@ -65,7 +65,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$ROOT/scripts/lib/sawti-paths.sh"
-DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
+DEV_BUNDLE_DEPLOY="$HOME/Applications/Sawti.app"
 MTCLI_PKG="$ROOT/tools/mt-cli"
 MTCLI="$MTCLI_PKG/.build/release/mt-cli"
 FIXTURE="$ROOT/scripts/fixtures/webrtc-tone.html"

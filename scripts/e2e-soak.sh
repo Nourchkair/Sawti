@@ -60,7 +60,7 @@ Usage: ./scripts/e2e-soak.sh [options]
   --max-growth N     Catastrophe gate: max MB/hour of footprint growth
                      (default 500). Everything is logged regardless.
   --fixture PATH     Audio fixture for meeting-simulator.
-  --no-build         Use ~/Applications/MeetingTranscriber-Dev.app as-is.
+  --no-build         Use ~/Applications/Sawti.app as-is.
   --no-mic           Disable microphone capture for this run and restore the prior setting on exit.
   --leave-app        Leave the app running afterwards (debugging).
 USAGE
@@ -75,7 +75,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$ROOT/scripts/lib/sawti-paths.sh"
-DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
+DEV_BUNDLE_DEPLOY="$HOME/Applications/Sawti.app"
 SIMULATOR_PKG="$ROOT/tools/meeting-simulator"
 SIMULATOR_BIN="$SIMULATOR_PKG/.build/release/meeting-simulator"
 DEFAULT_FIXTURE="$ROOT/app/MeetingTranscriber/Tests/Fixtures/two_speakers_de.wav"

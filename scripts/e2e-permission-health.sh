@@ -59,7 +59,7 @@ cleanup() {
     # abandons the rest of the trap — leaving the stale launchctl entries the
     # next line exists to clear — and overrides a successful run's exit status.
     # Same guard the soak and cpu-load lanes already put on this call.
-    quit_running_app || true
+    quit_running_app "$DEV_BUNDLE_ID" "$BIN" || true
     bootout_stale_launchctl
 }
 trap cleanup EXIT
@@ -80,7 +80,7 @@ fi
 
 # --- 2. Kill any running instance + clear launchctl ----------------------
 
-quit_running_app
+quit_running_app "$DEV_BUNDLE_ID" "$BIN"
 bootout_stale_launchctl
 
 # --- 3. Launch (suppress auto-watch so the app stays idle) ---------------

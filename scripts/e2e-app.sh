@@ -17,7 +17,7 @@
 #   - A virtual input device (BlackHole 2ch) so AVAudioEngine has something
 #     to bind to on Mac mini hosts without a built-in mic
 #   - System Settings → Privacy: Microphone + Screen & System Audio Recording
-#     granted to ~/Applications/MeetingTranscriber-Dev.app
+#     granted to ~/Applications/Sawti.app
 #   See scripts/setup-self-hosted-runner.sh for the bootstrap flow.
 
 set -euo pipefail
@@ -85,7 +85,7 @@ Usage: e2e-app.sh [--no-build] [--keep-app] [--two-meetings] [--record-only] [--
                   [--naming-escape] [--naming-switch] [--echo-bleed] [--echo-cancel]
                   [--naming-confirm] [--fixture path/to.wav]
 
-  --no-build           Skip build/deploy/re-sign; use ~/Applications/MeetingTranscriber-Dev.app as-is.
+  --no-build           Skip build/deploy/re-sign; use ~/Applications/Sawti.app as-is.
   --keep-app           Leave the dev app running on exit. Default: quit it.
   --two-meetings       Run two meetings back-to-back (cooldown + state-reset coverage).
   --mic-only           Record the microphone with no app audio (issue #633) via
@@ -138,7 +138,7 @@ Usage: e2e-app.sh [--no-build] [--keep-app] [--two-meetings] [--record-only] [--
                        Pre-fix the launch cleanup deletes the temp -> no
                        recovery (RED); the fix re-mixes + enqueues it (GREEN).
   --redeploy-only      Rebuild + redeploy the canonical (non-fault-injection)
-                       bundle to ~/Applications/MeetingTranscriber-Dev.app and
+                       bundle to ~/Applications/Sawti.app and
                        exit without launching or running a meeting. Used as an
                        always() cleanup after --mic-device-change to restore a
                        clean bundle (that run leaves a deliberately-crashing
@@ -350,7 +350,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$ROOT/scripts/lib/sawti-paths.sh"
 DEV_BUNDLE_BUILD="$ROOT/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app"
-DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
+DEV_BUNDLE_DEPLOY="$HOME/Applications/Sawti.app"
 SIMULATOR_PKG="$ROOT/tools/meeting-simulator"
 SIMULATOR_BIN="$SIMULATOR_PKG/.build/release/meeting-simulator"
 MTCLI_PKG="$ROOT/tools/mt-cli"
@@ -704,7 +704,7 @@ _other_drivers="$(_e2e_other_drivers)"
 # What this cannot tell apart: a foreign app from a sibling driver's leftover
 # on a hand-run host, and a stale marker pid reused by an unrelated process
 # (both rare, both reported with the pid and command so a person can decide).
-_DEV_APP_PATTERN="MeetingTranscriber-Dev.app/Contents/MacOS/MeetingTranscriber"
+_DEV_APP_PATTERN="Sawti.app/Contents/MacOS/MeetingTranscriber"
 _E2E_APP_MARKER="$SAWTI_APP_SUPPORT_DIR/.e2e-app-launched"
 _running_app="$( { pgrep -f "$_DEV_APP_PATTERN" || true; } | head -1)"
 if [ -n "$_running_app" ]; then
@@ -2651,7 +2651,7 @@ run_naming_switch() {
     # The regression itself: pre-fix, the first keystroke wrote names[$first_index]
     # into a $second_count-element array and the app died. Check the process
     # directly so the report names the defect rather than a generic dead app.
-    if ! pgrep -f "MeetingTranscriber-Dev.app/Contents/MacOS/MeetingTranscriber" >/dev/null 2>&1; then
+    if ! pgrep -f "Sawti.app/Contents/MacOS/MeetingTranscriber" >/dev/null 2>&1; then
         fail "$label: the app DIED on the first keystrokes into $survivor after the dialog switched from a $first_count-speaker job to a $second_count-speaker job with the same title (issue #700: the field kept a binding to row $first_index, past the new job's $second_count rows). Driver output: $out"
     fi
     assert_app_alive
