@@ -170,6 +170,24 @@ final class MenuBarIconTests: XCTestCase { // swiftlint:disable:this type_body_l
         }
     }
 
+    func testIdlePermissionErrorKeepsSawtiLogoAndWarning() {
+        let idlePermissionWarning = MenuBarIcon.image(badge: .inactive, permissionOverlay: true)
+        let permissionError = MenuBarIcon.image(badge: .error, permissionOverlay: true)
+        let nonPermissionError = MenuBarIcon.image(badge: .error)
+
+        XCTAssertFalse(permissionError.isTemplate, "the warning must remain red")
+        XCTAssertEqual(
+            permissionError.tiffRepresentation,
+            idlePermissionWarning.tiffRepresentation,
+            "permission health errors while idle should show the Sawti logo with the warning badge",
+        )
+        XCTAssertNotEqual(
+            nonPermissionError.tiffRepresentation,
+            idlePermissionWarning.tiffRepresentation,
+            "a non-permission transcription error should keep its established error icon",
+        )
+    }
+
     func testPermissionOverlayDefaultsToFalse() {
         let withoutParam = MenuBarIcon.image(badge: .recording, animationFrame: 0)
         let explicitFalse = MenuBarIcon.image(badge: .recording, animationFrame: 0, permissionOverlay: false)
