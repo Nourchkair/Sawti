@@ -13,14 +13,14 @@
 #      That's fine for our purpose: TCC matches future builds via the
 #      cert's leaf SHA-1, which stays constant across rebuilds even if
 #      the chain is untrusted.
-#   4. Deploys to ~/Applications/MeetingTranscriber-Dev.app (stable path).
+#   4. Deploys to ~/Applications/Sawti.app (stable path).
 #
 # What you do once after this script:
-#   - Launch the deployed .app (e.g. `open ~/Applications/MeetingTranscriber-Dev.app`).
+#   - Launch the deployed .app (e.g. `open ~/Applications/Sawti.app`).
 #   - When macOS prompts for Microphone, click Allow.
 #   - When the app first tries to detect a meeting via Screen Recording,
 #     System Settings → Privacy & Security → Screen & System Audio
-#     Recording → toggle on for MeetingTranscriber-Dev.app.
+#     Recording → toggle on for Sawti.app.
 #   - From that point on, every rebuild keeps the same cert leaf SHA-1, so
 #     TCC keeps the grants — scripts/e2e-app.sh runs end-to-end.
 #
@@ -44,7 +44,7 @@ CERT_ORG="meetingtranscriber-self-hosted"
 # - `set-key-partition-list -k ""` succeeds without prompts
 # Login keychain has neither property over SSH, hence the separation.
 DEV_KEYCHAIN_PASS=""
-APP_BUNDLE_PATH="$HOME/Applications/MeetingTranscriber-Dev.app"
+APP_BUNDLE_PATH="$HOME/Applications/Sawti.app"
 # /tmp because world-readable; the cert file may also be useful for a
 # Keychain Access drag-import if the operator wants to manually mark the
 # cert trusted (not required for signing, just nice-to-have).
@@ -278,8 +278,8 @@ Next (one-time, in the GUI session as user '$USER'):
      "+" → $APP_BUNDLE_PATH.
 
   4. Verify in System Settings → Privacy & Security:
-       - Microphone               → MeetingTranscriber-Dev.app on
-       - Screen & System Audio Recording → MeetingTranscriber-Dev.app on
+       - Microphone               → Sawti.app on
+       - Screen & System Audio Recording → Sawti.app on
 
 After that, scripts/e2e-app.sh rebuilds + redeploys, the cert leaf SHA-1
 stays $CERT_HASH across rebuilds, and TCC keeps the grants automatically.

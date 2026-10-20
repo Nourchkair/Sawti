@@ -64,7 +64,7 @@ DEV_BUNDLE_BUILD="$ROOT/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app
 # a fresh path on every clone — TCC would deny Microphone + Screen
 # Recording and the recorder would emit zero-byte WAVs (observed during
 # this script's development).
-DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
+DEV_BUNDLE_DEPLOY="$HOME/Applications/Sawti.app"
 BIN="$DEV_BUNDLE_DEPLOY/Contents/MacOS/MeetingTranscriber"
 MTCLI="$ROOT/tools/mt-cli/.build/debug/mt-cli"
 # `release/` to align with `scripts/e2e-app.sh` — when both scripts run

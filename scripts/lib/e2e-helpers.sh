@@ -33,7 +33,7 @@ quit_running_app() {
     # Default pattern matches the dev bundle. Release-bundle callers
     # (e.g. test_rpc.sh against the homebrew-cask binary) override by
     # passing a second arg.
-    local pattern="${2:-MeetingTranscriber-Dev.app/Contents/MacOS/MeetingTranscriber}"
+    local pattern="${2:-Sawti.app/Contents/MacOS/MeetingTranscriber}"
     if ! pgrep -f "$pattern" >/dev/null; then
         return 0
     fi
@@ -126,7 +126,7 @@ die() {
 # `open`-launched scripts (e2e-app.sh) without two APIs. The default
 # matches the deployed dev .app — same string as `quit_running_app`.
 assert_app_alive() {
-    local pattern="${1:-MeetingTranscriber-Dev.app/Contents/MacOS/MeetingTranscriber}"
+    local pattern="${1:-Sawti.app/Contents/MacOS/MeetingTranscriber}"
     if ! pgrep -f "$pattern" >/dev/null 2>&1; then
         die "app process matching '$pattern' is not running"
     fi

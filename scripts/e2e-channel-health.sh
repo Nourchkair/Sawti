@@ -80,7 +80,7 @@ fi
 
 # --- 2. Kill any running instance + clear launchctl ----------------------
 
-quit_running_app
+quit_running_app "$DEV_BUNDLE_ID" "$BIN"
 bootout_stale_launchctl
 
 # --- 3. Launch with debug env hooks --------------------------------------

@@ -51,7 +51,7 @@ Usage: e2e-cpu-load.sh [--no-build] [--keep-app] [--fixture path/to.wav]
                        [--idle-window SECONDS] [--active-window SECONDS]
                        [--idle-max-cpu PERCENT]
 
-  --no-build           Skip build/deploy/re-sign; use ~/Applications/MeetingTranscriber-Dev.app as-is.
+  --no-build           Skip build/deploy/re-sign; use ~/Applications/Sawti.app as-is.
   --keep-app           Leave the dev app running on exit. Default: quit it.
   --fixture            Audio fixture for meeting-simulator. Default: two_speakers_de.wav.
   --idle-window        Idle measurement window in seconds (default 60).
@@ -72,7 +72,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$ROOT/scripts/lib/sawti-paths.sh"
 DEV_BUNDLE_BUILD="$ROOT/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app"
-DEV_BUNDLE_DEPLOY="$HOME/Applications/MeetingTranscriber-Dev.app"
+DEV_BUNDLE_DEPLOY="$HOME/Applications/Sawti.app"
 SIMULATOR_PKG="$ROOT/tools/meeting-simulator"
 SIMULATOR_BIN="$SIMULATOR_PKG/.build/release/meeting-simulator"
 DEFAULT_FIXTURE="$ROOT/app/MeetingTranscriber/Tests/Fixtures/two_speakers_de.wav"
