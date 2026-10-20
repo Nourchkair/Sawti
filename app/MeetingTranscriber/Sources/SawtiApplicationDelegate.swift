@@ -24,7 +24,6 @@ final class SawtiApplicationDelegate: NSObject, NSApplicationDelegate {
     /// official idle logo and animated recording states remain in sync.
     func installStatusItem(state: AppState, rootView: AnyView) {
         appState = state
-        installStatusButton()
 
         if hostingController == nil {
             let host = NSHostingController(rootView: rootView)
