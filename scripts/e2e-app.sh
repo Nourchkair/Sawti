@@ -233,8 +233,8 @@ esac
 SIMULATOR_PLAYBACK_DELAY=$((10#$SIMULATOR_PLAYBACK_DELAY))
 [ "$SIMULATOR_PLAYBACK_DELAY" -le 120 ] \
     || { echo "Error: --playback-delay must be at most 120 seconds" >&2; exit 2; }
-if [ "$SIMULATOR_PLAYBACK_DELAY" -eq 1 ]; then
-    echo "Error: --playback-delay must be at least 2 seconds to verify recording before audio" >&2
+if [ "$SIMULATOR_PLAYBACK_DELAY" -gt 0 ] && [ "$SIMULATOR_PLAYBACK_DELAY" -lt 9 ]; then
+    echo "Error: --playback-delay must be at least 9 seconds; the watch loop needs two 3-second polls to confirm a meeting before fixture audio starts" >&2
     exit 2
 fi
 if [ "$SIMULATOR_PLAYBACK_DELAY" -gt 0 ] \

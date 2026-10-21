@@ -84,7 +84,9 @@ struct MeetingSimulator: ParsableCommand {
         MainActor.assumeIsolated {
             runSimulator(
                 fixturePath: fixturePath, windowTitle: windowTitle,
-                silent: silentMode, loop: looping, duration: dur, playbackDelay: delay,
+                playback: SimulatorPlaybackOptions(
+                    silent: silentMode, loop: looping, duration: dur, playbackDelay: delay,
+                ),
             )
         }
     }
@@ -132,14 +134,18 @@ struct MeetingSimulator: ParsableCommand {
 /// `audioPlayerDidFinishPlaying` to drive a natural exit.
 private let defaultSilentDuration: Double = 60
 
+private struct SimulatorPlaybackOptions {
+    let silent: Bool
+    let loop: Bool
+    let duration: Double?
+    let playbackDelay: Double
+}
+
 /// AppKit lifecycle isn't reentrant — `NSApplication.shared.run()` blocks
 /// forever once started. This runs the whole window + audio + assertion
 /// dance from inside ArgumentParser's `run()` and never returns.
 @MainActor
-func runSimulator(
-    fixturePath: String, windowTitle: String, silent: Bool, loop: Bool,
-    duration: Double?, playbackDelay: Double,
-) {
+private func runSimulator(fixturePath: String, windowTitle: String, playback: SimulatorPlaybackOptions) {
     // Fail fast before any AppKit / IOKit state is created.
     guard FileManager.default.fileExists(atPath: fixturePath) else {
         FileHandle.standardError.write(Data("ERROR: Audio file not found: \(fixturePath)\n".utf8))
@@ -156,9 +162,9 @@ func runSimulator(
     let assertionID = createPowerAssertion()
     print("Window: \"\(windowTitle)\"")
     print("PID: \(ProcessInfo.processInfo.processIdentifier)")
-    print(silent ? "Audio: <silent mode — zero-volume playback>" : "Audio: \(fixturePath)")
-    if playbackDelay > 0 {
-        print("Playback starts after \(String(format: "%.1f", playbackDelay))s.")
+    print(playback.silent ? "Audio: <silent mode — zero-volume playback>" : "Audio: \(fixturePath)")
+    if playback.playbackDelay > 0 {
+        print("Playback starts after \(String(format: "%.1f", playback.playbackDelay))s.")
     }
     print("Leave button visible for AX verification")
 
@@ -169,16 +175,24 @@ func runSimulator(
     // Non-silent mode without an explicit --duration exits via the audio
     // player's finish callback, so its effective duration is nil. Looping
     // removes that callback, so it needs the timed exit silent mode uses.
-    let effectiveDuration = duration ?? ((silent || loop) ? defaultSilentDuration + playbackDelay : nil)
+    let effectiveDuration = playback.duration ?? ((playback.silent || playback.loop) ? defaultSilentDuration + playback.playbackDelay : nil)
     let playbackMode = PlaybackMode(
-        silent: silent, loop: loop, timedDuration: effectiveDuration ?? defaultSilentDuration,
+        silent: playback.silent, loop: playback.loop, timedDuration: effectiveDuration ?? defaultSilentDuration,
     )
-    if playbackDelay > 0 {
-        label.stringValue = "Waiting to play audio\n(\(String(format: "%.0f", playbackDelay))s)"
-        DispatchQueue.main.asyncAfter(deadline: .now() + playbackDelay) {
+    if playback.playbackDelay > 0 {
+        // Open CoreAudio before advertising the simulated meeting. Sawti's
+        // process tap must translate the simulator PID to an AudioObjectID
+        // when the meeting is detected. If AVAudioPlayer is created only
+        // after the delay, recording can fail with "Failed to translate any
+        // PIDs to audio objects". A near-silent tone activates the process
+        // audio stream without playing fixture speech before the start time.
+        prepareWarmupPlayback(delegate: delegate)
+        label.stringValue = "Waiting to play audio\n(\(String(format: "%.0f", playback.playbackDelay))s)"
+        DispatchQueue.main.asyncAfter(deadline: .now() + playback.playbackDelay) {
             MainActor.assumeIsolated {
                 print("Playback delay elapsed — starting fixture audio.")
                 startPlayback(fixturePath: fixturePath, mode: playbackMode, label: label, delegate: delegate)
+                delegate.stopWarmupPlayback()
             }
         }
     } else {
@@ -279,6 +293,62 @@ private struct PlaybackMode {
 }
 
 @MainActor
+private func prepareWarmupPlayback(delegate: AppDelegate) {
+    do {
+        let warmupURL = try writeWarmupTone()
+        let player = try AVAudioPlayer(contentsOf: warmupURL)
+        player.delegate = delegate
+        // -86 dB relative to the full-scale tone: enough to keep CoreAudio's
+        // output stream active, while inaudible in normal use.
+        player.volume = 0.0001
+        player.numberOfLoops = -1
+        player.prepareToPlay()
+        player.play()
+        delegate.warmupPlayer = player
+        delegate.warmupURL = warmupURL
+        print("Near-silent CoreAudio warm-up started for delayed fixture mode.")
+    } catch {
+        print("ERROR: Could not prepare CoreAudio warm-up: \(error)")
+    }
+}
+
+private func writeWarmupTone() throws -> URL {
+    let sampleRate: UInt32 = 48000
+    let frameCount = Int(sampleRate)
+    let bytesPerSample: UInt16 = 2
+    let dataSize = UInt32(frameCount) * UInt32(bytesPerSample)
+    var wave = Data()
+    wave.append(contentsOf: "RIFF".utf8)
+    wave.appendLittleEndian(36 + dataSize)
+    wave.append(contentsOf: "WAVEfmt ".utf8)
+    wave.appendLittleEndian(UInt32(16))
+    wave.appendLittleEndian(UInt16(1))
+    wave.appendLittleEndian(UInt16(1))
+    wave.appendLittleEndian(sampleRate)
+    wave.appendLittleEndian(sampleRate * UInt32(bytesPerSample))
+    wave.appendLittleEndian(bytesPerSample)
+    wave.appendLittleEndian(UInt16(16))
+    wave.append(contentsOf: "data".utf8)
+    wave.appendLittleEndian(dataSize)
+    for frame in 0 ..< frameCount {
+        let phase = 2 * Double.pi * 440 * Double(frame) / Double(sampleRate)
+        let sample = Int16(sin(phase) * 16384)
+        wave.appendLittleEndian(sample)
+    }
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("sawti-meeting-simulator-warmup-\(UUID().uuidString).wav")
+    try wave.write(to: url, options: .atomic)
+    return url
+}
+
+private extension Data {
+    mutating func appendLittleEndian(_ value: some FixedWidthInteger) {
+        var littleEndian = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
+    }
+}
+
+@MainActor
 private func startPlayback(
     fixturePath: String,
     mode: PlaybackMode,
@@ -302,7 +372,8 @@ private func startPlayback(
             label.stringValue = "SILENT MODE\n(zero-volume playback, \(seconds)s)"
             print("Silent mode: playing fixture at volume=0 for \(seconds)s.")
         } else {
-            if mode.loop { player.numberOfLoops = -1 }
+            player.volume = 1
+            player.numberOfLoops = mode.loop ? -1 : 0
             label.stringValue = "Playing \(audioURL.lastPathComponent)\n"
                 + "(\(String(format: "%.0f", player.duration))s\(mode.loop ? ", looping" : ""))"
             print("Playing audio (\(String(format: "%.1f", player.duration))s)...")
@@ -321,13 +392,25 @@ private func startPlayback(
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, AVAudioPlayerDelegate {
     let assertionID: IOPMAssertionID
     var audioPlayer: AVAudioPlayer?
+    var warmupPlayer: AVAudioPlayer?
+    var warmupURL: URL?
 
     init(assertionID: IOPMAssertionID) {
         self.assertionID = assertionID
     }
 
     func applicationWillTerminate(_: Notification) {
+        stopWarmupPlayback()
         IOPMAssertionRelease(assertionID)
+    }
+
+    func stopWarmupPlayback() {
+        warmupPlayer?.stop()
+        warmupPlayer = nil
+        if let warmupURL {
+            try? FileManager.default.removeItem(at: warmupURL)
+            self.warmupURL = nil
+        }
     }
 
     func windowWillClose(_: Notification) {
