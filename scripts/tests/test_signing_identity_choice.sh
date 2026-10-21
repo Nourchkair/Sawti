@@ -195,8 +195,11 @@ _make_leaf_cert() {
 # stdout, because the note it prints is part of the contract.
 _choose() {
     local workdir="$1" bundle="$2" path="$STUB_SECURITY:$PATH"
+    mkdir -p "$workdir/home/Library/Keychains"
     [ -f "$workdir/leaf.der" ] && path="$STUB_CODESIGN:$path"
     PATH="$path" \
+    HOME="$workdir/home" \
+    SAWTI_KEYCHAIN="$workdir/home/Library/Keychains/SawtiCaptureProbe.keychain-db" \
     SECURITY_IDENTITIES="$workdir/identities.txt" \
     STUB_LEAF_DER="$workdir/leaf.der" \
     SIGNING_LIB="$REPO_ROOT/scripts/lib/signing.sh" \
@@ -250,9 +253,11 @@ _stage_dev_bundle_scripts() {
 # goes to $1/run.log, every codesign call to $1/codesign.log, and its status
 # is returned.
 _run_dev_bundle_script() {
-    local workdir="$1" script="$2" root="$1/repo"
+    local workdir="$1" script="$2" root="$1/repo" test_home="$1/home"
     shift 2
+    mkdir -p "$test_home/Library/Keychains"
     PATH="$STUB_HARNESS:$STUB_CODESIGN:$STUB_SECURITY:$PATH" \
+    HOME="$test_home" \
     SECURITY_IDENTITIES="$workdir/identities.txt" \
     STUB_LEAF_DER="$workdir/leaf.der" \
     STUB_EXECUTABLE="$root/app/MeetingTranscriber/.build/MeetingTranscriber-Dev.app/Contents/MacOS/MeetingTranscriber" \
@@ -342,6 +347,29 @@ test_prefers_developer_id_over_the_first_listed_identity() {
     _expect "$report" identity "$DEVID_A" || rc=1
     _expect "$report" reason "chose the Developer ID Application certificate" || rc=1
     _expect "$report" stdout "" || rc=1
+    rm -rf "$workdir"
+    return "$rc"
+}
+
+# The local TCC-preserving certificate is held in its own keychain and must be
+# selected by the shared chooser rather than discovered by run_app.sh.
+test_prefers_sawti_development_identity() {
+    local workdir bundle report status rc=0
+    workdir="$(mktemp -d)"
+    bundle="$(_make_bundle "$workdir")"
+    mkdir -p "$workdir/home/Library/Keychains"
+    : > "$workdir/home/Library/Keychains/SawtiCaptureProbe.keychain-db"
+    _keychain_lists "$workdir" \
+        "$APPLE_DEV \"Apple Development: Someone (ABCDE12345)\"" \
+        "$SELF_SIGNED \"Sawti Capture Probe Development\""
+
+    report="$( _choose "$workdir" "$bundle" )"
+    status=$?
+
+    [ "$status" -eq 0 ] || { echo "  choose_signing_identity exited $status" >&2; rc=1; }
+    _expect "$report" identity "$SELF_SIGNED" || rc=1
+    _expect "$report" reason "selected Sawti development identity" || rc=1
+    _expect "$report" listing "SHA-1 $SELF_SIGNED" || rc=1
     rm -rf "$workdir"
     return "$rc"
 }
@@ -634,6 +662,7 @@ test_run_app_says_so_when_it_leaves_the_bundle_unsigned() {
     _run_dev_bundle_script "$workdir" run_app.sh --build-only
     status=$?
     signed="$(_signed_with "$workdir")"
+    [ "$signed" = "-" ] && signed=""
 
     if [ "$status" -ne 0 ]; then
         echo "  run_app.sh exited $status on an empty keychain; its last lines:" >&2
@@ -644,7 +673,7 @@ test_run_app_says_so_when_it_leaves_the_bundle_unsigned() {
         echo "  signed with '$signed' although the keychain holds no identity" >&2
         rc=1
     fi
-    if ! grep -q 'WARNING: no codesigning identity' "$workdir/run.log"; then
+    if ! grep -q 'WARNING: no certificate identity is available' "$workdir/run.log"; then
         echo "  left the bundle unsigned without saying so; the build log ends:" >&2
         tail -5 "$workdir/run.log" | sed 's/^/    /' >&2
         rc=1
@@ -685,6 +714,8 @@ run_test "an Apple Development bundle moves to the Developer ID" \
     test_moves_an_apple_development_bundle_to_developer_id
 run_test "with nothing to keep, Developer ID beats the first listed identity" \
     test_prefers_developer_id_over_the_first_listed_identity
+run_test "the dedicated Sawti development identity is selected centrally" \
+    test_prefers_sawti_development_identity
 run_test "without any Developer ID the first identity is taken, with a note" \
     test_takes_the_first_identity_when_no_developer_id_exists
 run_test "a carried certificate is kept when there is no Developer ID to move to" \

@@ -350,6 +350,22 @@ choose_signing_identity() {
     listing="$(codesigning_identities)"
     fields="$(printf '%s\n' "$listing" | identity_fields)"
     devid="$(printf '%s\n' "$fields" | first_developer_id)"
+
+    # Local Sawti development builds may use a dedicated self-signed identity
+    # stored in a separate keychain. Resolve it here, alongside the other
+    # signing policy, so callers cannot accidentally replace the bundle before
+    # discovering which TCC identity to keep.
+    local sawti_dev_identity
+    sawti_dev_identity="$(sawti_development_identity)"
+    if [ -n "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
+        sawti_dev_identity="$SAWTI_DEV_SIGNING_IDENTITY"
+    fi
+    if [ -n "$sawti_dev_identity" ]; then
+        CHOSEN_IDENTITY="$sawti_dev_identity"
+        CHOSEN_IDENTITY_REASON="selected Sawti development identity"
+        CHOSEN_IDENTITY_LISTING="SHA-1 $sawti_dev_identity"
+        return 0
+    fi
     # The carried certificate's record: empty when the bundle is unsigned or
     # the certificate has left the keychain, and either way there is nothing
     # to keep.
@@ -376,6 +392,22 @@ choose_signing_identity() {
         CHOSEN_IDENTITY_LISTING="$(printf '%s\n' "$listing" | awk -v h="$CHOSEN_IDENTITY" 'toupper($2) == h')"
     fi
     return 0
+}
+
+# sawti_development_identity → SHA-1 of the optional local development
+# certificate, or empty when it is not installed. Kept in this library because
+# the signing choice belongs here, not in each dev-bundle caller.
+sawti_development_identity() {
+    local keychain="${SAWTI_KEYCHAIN:-$HOME/Library/Keychains/SawtiCaptureProbe.keychain-db}"
+    [ -f "$keychain" ] || return 0
+    # Deliberately omit -v: the local self-signed development certificate is
+    # untrusted by design, but codesign can still use it and TCC relies on its
+    # stable leaf hash. The verbose query filters that identity out and silently
+    # turns every rebuild into a new ad-hoc identity.
+    security find-identity -p codesigning "$keychain" 2>/dev/null \
+        | awk '$1 ~ /^[0-9]+\)$/ && length($2) == 40 && $2 ~ /^[0-9A-Fa-f]+$/ &&
+               index($0, "Sawti Capture Probe Development") { print toupper($2); exit }' \
+        || true
 }
 
 # codesigning_identities → what `security find-identity -v -p codesigning`
@@ -707,6 +739,21 @@ require_signing_identity() {
     if [ -n "$candidate" ]; then
         SIGN_IDENTITY="$candidate"
         SIGN_KEYCHAIN="$DEV_KEYCHAIN"
+        return 0
+    fi
+
+    # Local Sawti development builds use their own keychain/certificate, not
+    # the older MeetingTranscriberDevSelfHosted identity installed by the
+    # self-hosted-runner bootstrap. Reuse that same certificate for live E2E so
+    # the deployment stays on the TCC identity the app already has grants for.
+    # `sawti_development_identity` intentionally uses the non-verbose lookup:
+    # the self-signed certificate is untrusted by design, but codesign can use
+    # it and TCC matches its stable leaf hash.
+    candidate="$(sawti_development_identity)"
+    if [ -n "$candidate" ]; then
+        SIGN_IDENTITY="$candidate"
+        SIGN_KEYCHAIN="${SAWTI_KEYCHAIN:-$HOME/Library/Keychains/SawtiCaptureProbe.keychain-db}"
+        echo "  Falling back to the Sawti development identity; this reuses its existing TCC grants." >&2
         return 0
     fi
 
