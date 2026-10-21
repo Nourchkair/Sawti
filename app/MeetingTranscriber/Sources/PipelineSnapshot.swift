@@ -13,20 +13,34 @@ import Foundation
 enum PipelineSnapshot {
     static let snapshotFilename = "pipeline_queue.json"
     static let stagingFilename = "pipeline_queue.tmp"
+    private static let ownerOnlyPermissions = 0o600
 
     /// JSON-encode `jobs` and atomically replace any existing snapshot at
     /// `logDir/pipeline_queue.json`. The staging write goes to
     /// `pipeline_queue.tmp` first; `replaceItemAt` (which lowers to
     /// `renamex_np` on macOS) swaps it in.
     ///
-    /// - Throws: `EncodingError` from JSONEncoder, or any
-    ///   `FileManager` / `Data.write` I/O error.
+    /// - Throws: `EncodingError` from JSONEncoder, or any `FileManager` I/O error.
     static func save(_ jobs: [PipelineJob], to logDir: URL) throws {
         let data = try JSONEncoder().encode(jobs)
+        let fileManager = FileManager.default
         let stagingPath = logDir.appendingPathComponent(stagingFilename)
-        try data.write(to: stagingPath)
+        if fileManager.fileExists(atPath: stagingPath.path) {
+            try fileManager.removeItem(at: stagingPath)
+        }
+        guard fileManager.createFile(
+            atPath: stagingPath.path,
+            contents: data,
+            attributes: [.posixPermissions: ownerOnlyPermissions],
+        ) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: stagingPath.path])
+        }
         let snapshotPath = logDir.appendingPathComponent(snapshotFilename)
-        _ = try FileManager.default.replaceItemAt(snapshotPath, withItemAt: stagingPath)
+        _ = try fileManager.replaceItemAt(snapshotPath, withItemAt: stagingPath)
+        try fileManager.setAttributes(
+            [.posixPermissions: ownerOnlyPermissions],
+            ofItemAtPath: snapshotPath.path,
+        )
     }
 
     // swiftlint:disable discouraged_optional_collection
@@ -44,6 +58,12 @@ enum PipelineSnapshot {
         guard FileManager.default.fileExists(atPath: snapshotPath.path) else {
             return nil
         }
+        // Existing snapshots predate the owner-only writer. Tighten them on
+        // the first launch that reads them, before any job metadata is loaded.
+        try FileManager.default.setAttributes(
+            [.posixPermissions: ownerOnlyPermissions],
+            ofItemAtPath: snapshotPath.path,
+        )
         let data = try Data(contentsOf: snapshotPath)
         return try JSONDecoder().decode([PipelineJob].self, from: data)
     }
