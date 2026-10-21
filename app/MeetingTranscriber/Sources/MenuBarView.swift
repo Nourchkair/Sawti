@@ -21,6 +21,7 @@ struct MenuBarView: View {
     let onOpenLastProtocol: () -> Void
     let onOpenProtocol: (URL) -> Void
     var onViewTranscript: ((URL) -> Void)? = nil
+    var onOpenRecordings: (() -> Void)? = nil
     let onOpenProtocolsFolder: () -> Void
     let onOpenSettings: () -> Void
     let onNameSpeakers: (() -> Void)?
@@ -189,6 +190,14 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder private var protocolActions: some View {
+        if let onOpenRecordings {
+            Button {
+                onOpenRecordings()
+            } label: {
+                Label("Recordings...", systemImage: "waveform")
+            }
+        }
+
         if let protocolPath = status?.protocolPath {
             Button {
                 onOpenLastProtocol()

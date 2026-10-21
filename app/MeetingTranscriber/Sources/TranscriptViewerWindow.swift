@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct TranscriptViewerWindow: View {
     let fileURL: URL?
+    let securityScopedRoot: URL?
 
     @State private var transcript = ""
     @State private var loadError: String?
@@ -52,14 +53,23 @@ struct TranscriptViewerWindow: View {
             loadError = "No transcript was selected."
             return
         }
-        let accessed = fileURL.startAccessingSecurityScopedResource()
-        defer { if accessed { fileURL.stopAccessingSecurityScopedResource() } }
+        let accessURL = accessRoot(for: fileURL)
+        let accessed = accessURL.startAccessingSecurityScopedResource()
+        defer { if accessed { accessURL.stopAccessingSecurityScopedResource() } }
         do {
             transcript = try String(contentsOf: fileURL, encoding: .utf8)
             loadError = nil
         } catch {
             loadError = "Sawti could not read this transcript file."
         }
+    }
+
+    private func accessRoot(for fileURL: URL) -> URL {
+        guard let securityScopedRoot else { return fileURL }
+        let filePath = fileURL.standardizedFileURL.path
+        let rootPath = securityScopedRoot.standardizedFileURL.path
+        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        return filePath == rootPath || filePath.hasPrefix(rootPrefix) ? securityScopedRoot : fileURL
     }
 
     private func exportCopy() {

@@ -18,6 +18,8 @@ extension PipelineQueue {
         let jobID: UUID
         let shortID: String
         let title: String
+        let appName: String
+        let recordedAt: Date
         let mixPath: URL?
         let appPath: URL?
         let micPath: URL?
@@ -114,6 +116,8 @@ extension PipelineQueue {
             jobID: job.id,
             shortID: job.shortID,
             title: job.meetingTitle,
+            appName: job.appName,
+            recordedAt: job.artifactStartTime,
             mixPath: job.mixPath,
             appPath: job.appPath,
             micPath: job.micPath,
@@ -881,6 +885,19 @@ extension PipelineQueue {
             jobID: ctx.jobID,
             Self.persistAudioToOutput(ctx: ctx, outputDir: recordingsDir, stagingDir: stagingDir),
         )
+
+        do {
+            try RecordingLibraryMetadata(
+                title: ctx.title,
+                appName: ctx.appName,
+                recordedAt: ctx.recordedAt,
+                participants: ctx.participants,
+            ).write(toDirectory: recordingsDir, basename: ctx.slug)
+        } catch {
+            logger.warning(
+                "[\(ctx.shortID, privacy: .public)] recording library metadata could not be saved: \(error.localizedDescription, privacy: .private)",
+            )
+        }
 
         // --- Persist 16kHz audio for re-diarization (move instead of copy to avoid double I/O) ---
         try? FileManager.default.moveItem(
