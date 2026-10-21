@@ -299,17 +299,8 @@ final class SpeakerNamingSession {
         let matcher = speakerMatcherFactory()
         let verbose = matcher.matchVerbose(embeddings: embeddings)
         let matched = verbose.mapValues(\.assignedName)
-        var autoNames = matched
+        let autoNames = matched
         let topCandidates = verbose.mapValues(\.topCandidates)
-
-        // Pre-match participants to remaining speakers.
-        if !participants.isEmpty {
-            autoNames = SpeakerMatcher.preMatchParticipants(
-                mapping: autoNames,
-                speakingTimes: diarization.speakingTimes,
-                participants: participants,
-            )
-        }
 
         let suggestedAtDialog = autoNames
         let autoMatched = matched.count { $0.key != $0.value }

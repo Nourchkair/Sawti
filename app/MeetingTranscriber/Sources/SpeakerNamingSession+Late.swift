@@ -325,14 +325,7 @@ extension SpeakerNamingSession {
         guard let embeddings = diarization.embeddings else { return nil }
 
         let matcher = speakerMatcherFactory()
-        var autoNames = matcher.match(embeddings: embeddings)
-        if !prior.participants.isEmpty {
-            autoNames = SpeakerMatcher.preMatchParticipants(
-                mapping: autoNames,
-                speakingTimes: diarization.speakingTimes,
-                participants: prior.participants,
-            )
-        }
+        let autoNames = matcher.match(embeddings: embeddings)
 
         return SpeakerNamingData(
             jobID: jobID, meetingTitle: title, mapping: autoNames,

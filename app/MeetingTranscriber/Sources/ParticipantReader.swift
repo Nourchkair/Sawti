@@ -4,8 +4,9 @@ import os.log
 
 private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "ParticipantReader")
 
-/// Reads participant names from Teams meeting roster via Accessibility API
-/// and writes them to a JSON file for use during diarization.
+/// Reads participant names from the Teams meeting roster via Accessibility API.
+/// These names are optional manual suggestions in the naming dialog; they do not
+/// identify which diarized voice belongs to which participant.
 enum ParticipantReader {
     /// Known non-name strings in the Teams UI that should be filtered out.
     private static let skipPatterns: Set<String> = [
