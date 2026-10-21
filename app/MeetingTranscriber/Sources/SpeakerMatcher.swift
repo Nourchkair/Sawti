@@ -454,10 +454,11 @@ class SpeakerMatcher {
         }
     }
 
-    /// Pre-assign participant names to unmatched speakers by speaking time.
-    /// When unmatched remote speaker count == unmatched participant count,
-    /// assign by descending speaking time order.
-    /// This is a heuristic — the naming popup lets users correct mistakes.
+    /// Order-based participant pre-match heuristic. Speaking time and roster
+    /// order do not prove which participant produced a voice, so production
+    /// naming flows must not use this method. Meeting participants are
+    /// suggestions in the naming UI; automatic names come only from a
+    /// confident enrolled-voice match.
     ///
     /// - Parameters:
     ///   - mapping: Current label → name mapping (from `match()`)
