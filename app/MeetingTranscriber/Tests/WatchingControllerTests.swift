@@ -88,23 +88,52 @@ final class WatchingControllerTests: XCTestCase {
         XCTAssertTrue(requested, "toggleWatching must ask for Accessibility")
     }
 
-    /// The roster read is the grant's only consumer and is itself Teams-gated,
-    /// so someone watching only Zoom, Webex or a browser must never be asked for
-    /// full computer control. The prompt also used to burn a process-wide
-    /// one-shot, so enabling Teams later in the same session then never asked
-    /// for the grant that had by then become necessary.
+    /// The grant is requested only when no supported active-speaker route is
+    /// enabled; other watched apps do not need it.
     func testToggleWatchingSkipsAccessibilityWhenTeamsNotWatched() async {
         var requested = false
         let controller = makeController(
             requestAccessibility: { requested = true },
             watchTeams: false,
         )
+        controller.settings.watchZoom = false
         addTeardownBlock { await controller.watchLoop?.stop() }
 
         controller.toggleWatching()
         await waitFor(controller.watchLoop != nil)
 
-        XCTAssertFalse(requested, "watchTeams off must not ask for Accessibility")
+        XCTAssertFalse(requested, "no supported meeting route must not ask for Accessibility")
+    }
+
+    func testToggleWatchingRequestsAccessibilityForZoom() async {
+        var requested = false
+        let controller = makeController(
+            requestAccessibility: { requested = true },
+            watchTeams: false,
+        )
+        controller.settings.watchBrowserMeetings = false
+        addTeardownBlock { await controller.watchLoop?.stop() }
+
+        controller.toggleWatching()
+        await waitFor(requested)
+
+        XCTAssertTrue(requested)
+    }
+
+    func testToggleWatchingRequestsAccessibilityForBrowserMeetings() async {
+        var requested = false
+        let controller = makeController(
+            requestAccessibility: { requested = true },
+            watchTeams: false,
+        )
+        controller.settings.watchZoom = false
+        controller.settings.watchBrowserMeetings = true
+        addTeardownBlock { await controller.watchLoop?.stop() }
+
+        controller.toggleWatching()
+        await waitFor(requested)
+
+        XCTAssertTrue(requested)
     }
 
     /// Auto-watch reaches `toggleWatching` three seconds after launch with no

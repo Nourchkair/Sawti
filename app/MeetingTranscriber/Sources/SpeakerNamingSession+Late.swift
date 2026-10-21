@@ -325,7 +325,14 @@ extension SpeakerNamingSession {
         guard let embeddings = diarization.embeddings else { return nil }
 
         let matcher = speakerMatcherFactory()
-        let autoNames = matcher.match(embeddings: embeddings)
+        let autoNames = ActiveSpeakerNameMatcher.applying(
+            prior.activeSpeakerIntervals,
+            to: matcher.match(embeddings: embeddings),
+            segments: diarization.segments.map {
+                SpeakerNamingData.Segment(start: $0.start, end: $0.end, speaker: $0.speaker)
+            },
+            speakingTimes: diarization.speakingTimes,
+        )
 
         return SpeakerNamingData(
             jobID: jobID, meetingTitle: title, mapping: autoNames,
@@ -334,7 +341,9 @@ extension SpeakerNamingSession {
             segments: diarization.segments.map { seg in
                 SpeakerNamingData.Segment(start: seg.start, end: seg.end, speaker: seg.speaker)
             },
-            participants: prior.participants, isDualSource: prior.isDualSource,
+            participants: prior.participants,
+            activeSpeakerIntervals: prior.activeSpeakerIntervals,
+            isDualSource: prior.isDualSource,
         )
     }
 

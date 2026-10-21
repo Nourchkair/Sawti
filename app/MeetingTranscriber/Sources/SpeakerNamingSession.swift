@@ -291,6 +291,7 @@ final class SpeakerNamingSession {
         job: (jobID: UUID, title: String, slug: String, participants: [String]),
         diarizeProcess: any DiarizationProvider,
         isDualSource: Bool, outputDir: URL,
+        activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
     ) -> [String: String] {
         let (jobID, title, slug, participants) = job
         // No embeddings → no matching or dialog; keep the diarizer's own names.
@@ -299,12 +300,23 @@ final class SpeakerNamingSession {
         let matcher = speakerMatcherFactory()
         let verbose = matcher.matchVerbose(embeddings: embeddings)
         let matched = verbose.mapValues(\.assignedName)
-        let autoNames = matched
+        let autoNames = ActiveSpeakerNameMatcher.applying(
+            activeSpeakerIntervals,
+            to: matched,
+            segments: diarization.segments.map {
+                SpeakerNamingData.Segment(start: $0.start, end: $0.end, speaker: $0.speaker)
+            },
+            speakingTimes: diarization.speakingTimes,
+        )
+        let activeSpeakerNamesApplied = autoNames.count { matched[$0.key] != $0.value }
+        logger.info("[recognition] active_speaker_names_applied=\(activeSpeakerNamesApplied, privacy: .public)")
         let topCandidates = verbose.mapValues(\.topCandidates)
 
         let suggestedAtDialog = autoNames
         let autoMatched = matched.count { $0.key != $0.value }
-        logger.info("[recognition] \(matched.count) speakers, \(autoMatched) auto, \(matched.count - autoMatched) unknown")
+        logger.info(
+            "[recognition] \(matched.count) speakers, \(autoMatched) auto, \(matched.count - autoMatched) unknown",
+        )
 
         // Use persisted 16kHz path (survives workDir cleanup).
         let persistedAudioPath = outputDir.appendingPathComponent("recordings")
@@ -320,6 +332,7 @@ final class SpeakerNamingSession {
                 SpeakerNamingData.Segment(start: seg.start, end: seg.end, speaker: seg.speaker)
             },
             participants: participants,
+            activeSpeakerIntervals: activeSpeakerIntervals,
             isDualSource: isDualSource,
         )
 

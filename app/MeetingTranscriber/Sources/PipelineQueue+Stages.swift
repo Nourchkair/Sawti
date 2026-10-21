@@ -25,6 +25,7 @@ extension PipelineQueue {
         let micPath: URL?
         let micDelay: TimeInterval
         let participants: [String]
+        let activeSpeakerIntervals: [ActiveSpeakerInterval]?
         /// Persisted-file basename, computed once from title + jobID + the
         /// meeting-start time so the transcript, protocol, diarization and
         /// audio stages all agree on the same `\(slug)` stem.
@@ -123,6 +124,7 @@ extension PipelineQueue {
             micPath: job.micPath,
             micDelay: job.micDelay,
             participants: job.participants,
+            activeSpeakerIntervals: job.activeSpeakerIntervals,
             // Anchor the basename on the meeting start; reimport/orphan jobs
             // have no recorded start, so fall back to the enqueue time.
             slug: namingSlug(title: job.meetingTitle, jobID: job.id, startTime: job.artifactStartTime),
@@ -615,7 +617,7 @@ extension PipelineQueue {
                     diarization: currentDiarization,
                     job: (jobID: ctx.jobID, title: ctx.title, slug: ctx.slug, participants: ctx.participants),
                     diarizeProcess: diarizeProcess, isDualSource: transcription.isDualSource,
-                    outputDir: outputDir,
+                    outputDir: outputDir, activeSpeakerIntervals: ctx.activeSpeakerIntervals,
                 )
             }
 

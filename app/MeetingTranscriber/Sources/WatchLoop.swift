@@ -376,6 +376,29 @@ class WatchLoop {
         activeRecorder = recorder
         defer { activeRecorder = nil }
 
+        let activeSpeakerTimeline: ActiveSpeakerTimeline?
+        let activeSpeakerTask: Task<Void, Never>?
+        let observationStartUptime: TimeInterval?
+        if Self.supportsActiveSpeakerObservation(meeting) {
+            let pid = meeting.windowPID
+            let startUptime = ProcessInfo.processInfo.systemUptime
+            observationStartUptime = startUptime
+            let timeline = ActiveSpeakerTimeline()
+            activeSpeakerTimeline = timeline
+            activeSpeakerTask = Task.detached(priority: .utility) {
+                await ActiveSpeakerCapture.collect(
+                    pid: pid,
+                    recordingStartUptime: startUptime,
+                    timeline: timeline,
+                )
+            }
+        } else {
+            activeSpeakerTimeline = nil
+            activeSpeakerTask = nil
+            observationStartUptime = nil
+        }
+        defer { activeSpeakerTask?.cancel() }
+
         // Read participants (Teams)
         var participants: [String] = []
         if meeting.pattern.appName == "Microsoft Teams",
@@ -402,6 +425,17 @@ class WatchLoop {
 
         // Stop recording
         let recording = try recorder.stop()
+        activeSpeakerTask?.cancel()
+        let activeSpeakerIntervals: [ActiveSpeakerInterval]?
+        if let activeSpeakerTimeline, let observationStartUptime {
+            let elapsed = max(0, ProcessInfo.processInfo.systemUptime - observationStartUptime)
+            activeSpeakerIntervals = activeSpeakerTimeline.finish(at: elapsed)
+        } else {
+            activeSpeakerIntervals = nil
+        }
+        if let activeSpeakerIntervals {
+            logger.info("Active-speaker UI intervals captured: \(activeSpeakerIntervals.count, privacy: .public)")
+        }
 
         // --- Enqueue for background processing ---
         enqueueRecording(
@@ -410,7 +444,17 @@ class WatchLoop {
             recording: recording,
             trigger: .auto,
             participants: participants,
+            activeSpeakerIntervals: activeSpeakerIntervals,
         )
+    }
+
+    /// The native Teams and Zoom clients plus consented Chromium meeting
+    /// sessions are the supported UI-observation routes. Other call apps keep
+    /// their existing generic/manual speaker naming behavior.
+    private static func supportsActiveSpeakerObservation(_ meeting: DetectedMeeting) -> Bool {
+        meeting.pattern.appName == "Microsoft Teams"
+            || meeting.pattern.appName == "Zoom"
+            || meeting.pattern.requiresRecordingConsent
     }
 
     // MARK: - Meeting End Detection
@@ -454,6 +498,7 @@ class WatchLoop {
         recording: RecordingResult,
         trigger: RecordingSidecar.Trigger,
         participants: [String] = [],
+        activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
     ) {
         if recordOnly() {
             do {
@@ -492,6 +537,7 @@ class WatchLoop {
             micPath: recording.micPath,
             micDelay: recording.micDelay,
             participants: participants,
+            activeSpeakerIntervals: activeSpeakerIntervals,
             meetingStartTime: recording.recordingStartDate,
         )
         pipelineQueue?.enqueue(job)

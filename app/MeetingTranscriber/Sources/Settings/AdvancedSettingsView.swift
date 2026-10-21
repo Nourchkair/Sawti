@@ -53,7 +53,7 @@ struct AdvancedSettingsView: View {
                 )
                 PermissionRow(
                     label: "Accessibility",
-                    detail: "Optional — enables mute detection and meeting naming",
+                    detail: "Optional — enables active-speaker name matching when a meeting app exposes it",
                     granted: accessibilityOK,
                     optional: true,
                     help: "System Settings → Privacy & Security → Accessibility → enable Sawti",

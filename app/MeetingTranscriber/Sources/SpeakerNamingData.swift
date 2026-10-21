@@ -17,6 +17,9 @@ extension PipelineQueue {
         let audioPath: URL? // 16kHz mix for playback
         let segments: [Segment] // for extracting speaker snippets
         let participants: [String] // Meeting-roster name suggestions; never speaker identity evidence
+        /// Explicit speaking-state observations captured from the meeting UI.
+        /// Optional for naming sidecars written before active-speaker matching.
+        var activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil
         let isDualSource: Bool
         /// Per-instance identity for SwiftUI `.onChange` change-detection.
         /// Late re-diarization can produce a `mapping`/`speakingTimes` set
@@ -29,7 +32,7 @@ extension PipelineQueue {
 
         private enum CodingKeys: String, CodingKey {
             case jobID, meetingTitle, mapping, speakingTimes, embeddings,
-                 audioPath, segments, participants, isDualSource
+                 audioPath, segments, participants, activeSpeakerIntervals, isDualSource
         }
 
         struct Segment: Codable {

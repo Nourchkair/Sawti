@@ -68,12 +68,15 @@ Native SwiftUI menu bar application that orchestrates meeting detection, recordi
         │         IDs prefixed R_ (remote) / M_ (mic), then merged       │
         │ 5. SpeakerMatcher: cosine match against speakers.json          │
         │      (centroid + recent-FIFO, threshold 0.40, margin 0.10)     │
-        │ 6. Speaker naming UI (suspended via CheckedContinuation)       │
-        │ 7. Assign speakers to transcript by temporal overlap           │
-        │ 8. Save transcript (.txt)                                      │
-        │ 9. Protocol generation                                         │
+        │ 6. ActiveSpeakerReader samples explicit UI speaking labels     │
+        │      (Teams, Zoom, consented Chromium meetings; optional)       │
+        │ 7. Match diarized speakers by timeline only with strong        │
+        │      active-name evidence; otherwise retain generic/voice name │
+        │ 8. Speaker naming UI (manual review and correction)             │
+        │ 9. Save transcript (.txt)                                      │
+        │ 10. Protocol generation                                        │
         │      └─ ProtocolProvider: .claudeCLI | .openAICompatible | .none│
-        │ 10. Save protocol (.md, transcript appended)                   │
+        │ 11. Save protocol (.md, transcript appended)                   │
         └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -108,6 +111,7 @@ State writes to `AppPaths.dataDir`; IPC + queue snapshots to `ipcDir`.
 | `Settings/HelpBadge.swift` / `Settings/SettingsHelp.swift` | Reusable "?" help-popover badge + its shared copy, used across Settings sections |
 | `Settings/View+RecordOnly.swift` | `recordOnlyDisabled(_:)` view modifier — dims + disables the Transcription/Protocol/VAD/Diarization sections when record-only mode is on |
 | `SpeakerNamingView.swift` | Speaker naming dialog after diarization |
+| `ActiveSpeakerObservation.swift` | Polls explicit active-speaker labels from the meeting app's Accessibility tree and aligns their recording-relative intervals with diarization; ambiguous evidence remains unnamed |
 | `NamingGraceKey.swift` | Identity of one keyboard-grace window in the naming dialog — what counts as "a new grace window" (data revision + pending-job count), so the gate re-locks when another job steals focus |
 | `KnownVoicesView.swift` | Manage persisted speaker DB (rename, delete, merge) — embedded in `SpeakersSettingsView` |
 | `RecognitionStatsView.swift` | Recognition stats display — aggregate counts from `recognition_log.jsonl` |

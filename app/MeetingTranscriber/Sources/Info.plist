@@ -31,6 +31,6 @@
     <key>NSScreenCaptureUsageDescription</key>
     <string>Sawti uses Screen Recording permission to detect active meetings by reading window titles.</string>
     <key>NSAccessibilityUsageDescription</key>
-    <string>Sawti uses Accessibility to detect mute state and read meeting participants.</string>
+    <string>Sawti uses Accessibility to read meeting participant and active-speaker labels for optional speaker naming.</string>
 </dict>
 </plist>

@@ -72,6 +72,9 @@ struct PipelineJob: Identifiable, Codable {
     private(set) var micPath: URL?
     let micDelay: TimeInterval
     let participants: [String]
+    /// Explicit active-speaker UI observations captured during a live meeting.
+    /// Optional so queue snapshots written before this feature continue decoding.
+    var activeSpeakerIntervals: [ActiveSpeakerInterval]?
     let enqueuedAt: Date
     /// Wall-clock time the recording started (meeting start), captured directly
     /// by the recorder at start (`RecordingResult.recordingStartDate`), not
@@ -265,6 +268,7 @@ struct PipelineJob: Identifiable, Codable {
         micPath: URL?,
         micDelay: TimeInterval,
         participants: [String] = [],
+        activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
         meetingStartTime: Date? = nil,
         autoSkipNaming: Bool = false,
         // swiftlint:disable:next discouraged_optional_boolean
@@ -280,6 +284,7 @@ struct PipelineJob: Identifiable, Codable {
         self.micPath = micPath
         self.micDelay = micDelay
         self.participants = participants
+        self.activeSpeakerIntervals = activeSpeakerIntervals
         self.enqueuedAt = Date()
         self.meetingStartTime = meetingStartTime
         self.state = .waiting
