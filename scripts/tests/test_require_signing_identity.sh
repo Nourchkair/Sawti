@@ -58,6 +58,7 @@ _require() {
     DEVELOPER_ID="$developer_id" \
     DEV_KEYCHAIN="$keychain" \
     E2E_SIGNING_KEYCHAIN="${4:-}" \
+    SAWTI_KEYCHAIN="$dir/sawti.keychain-db" \
     DEV_CERT_NAME="MeetingTranscriberDevSelfHosted" \
         bash -c 'set -uo pipefail
                  source "$SIGNING_LIB"
@@ -161,6 +162,20 @@ test_dev_keychain_identity_is_accepted() {
     rm -rf "$dir"; return "$rc"
 }
 
+test_sawti_development_identity_is_accepted() {
+    local dir; dir="$(mktemp -d)" rc=0
+    _write_security_stub "$dir"
+    printf '  1) %s "Sawti Capture Probe Development"\n' "$HASH_A" > "$dir/identities"
+    : > "$dir/sawti.keychain-db"
+    check sawti_dev_keychain ok "$HASH_A" "$dir/sawti.keychain-db" \
+        _require "$dir" "" "$dir/absent.keychain-db" || rc=1
+    case "$(_stderr_of "$dir")" in
+        *"Falling back to the Sawti development identity"*) ;;
+        *) echo "  the Sawti fallback happened without saying so" >&2; rc=1 ;;
+    esac
+    rm -rf "$dir"; return "$rc"
+}
+
 # Neither route: the one case the old warn-and-continue branch let through.
 test_no_route_at_all_is_refused_with_both_remedies() {
     local dir; dir="$(mktemp -d)" rc=0
@@ -196,6 +211,7 @@ run_test "a Developer ID that resolves is accepted"              test_developer_
 run_test "an unresolvable Developer ID falls back"              test_unresolvable_developer_id_falls_back_to_the_dev_keychain
 run_test "an ambiguous Developer ID refuses, it does not fall back" test_an_ambiguous_developer_id_refuses_instead_of_falling_back
 run_test "a dev-keychain identity is accepted"                   test_dev_keychain_identity_is_accepted
+run_test "the Sawti development identity is accepted"            test_sawti_development_identity_is_accepted
 run_test "no route at all is refused, naming both remedies"      test_no_route_at_all_is_refused_with_both_remedies
 run_test "an ambiguous dev identity is reported as ambiguous"    test_ambiguous_dev_identity_is_not_blamed_on_a_missing_setup
 echo

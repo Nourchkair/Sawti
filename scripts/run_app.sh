@@ -57,26 +57,7 @@ swift build "${SWIFT_BUILD_FLAGS[@]}" --product SawtiCaptureHelper
 # feeds.
 # shellcheck source=lib/signing.sh
 source "$SCRIPT_DIR/lib/signing.sh"
-# Prefer this Sawti-only self-signed identity for local development when it is
-# present. It is intentionally not a trusted distribution identity, so the
-# generic valid-identity discovery below omits it; ad-hoc fallback would give
-# every rebuild a new TCC identity and invalidate macOS permission grants.
-if [ -z "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
-    SAWTI_KEYCHAIN="$HOME/Library/Keychains/SawtiCaptureProbe.keychain-db"
-    if [ -f "$SAWTI_KEYCHAIN" ]; then
-        SAWTI_DEV_SIGNING_IDENTITY="$(
-            security find-identity -p codesigning "$SAWTI_KEYCHAIN" 2>/dev/null \
-                | awk '$1 ~ /^[0-9]+[)]$/ && length($2) == 40 &&
-                       index($0, "Sawti Capture Probe Development") { print $2; exit }'
-        )"
-    fi
-fi
 choose_signing_identity "$APP_BUNDLE"
-if [ -n "${SAWTI_DEV_SIGNING_IDENTITY:-}" ]; then
-    CHOSEN_IDENTITY="$SAWTI_DEV_SIGNING_IDENTITY"
-    CHOSEN_IDENTITY_REASON="selected Sawti development identity"
-    CHOSEN_IDENTITY_LISTING="SHA-1 $CHOSEN_IDENTITY"
-fi
 
 # Assemble .app bundle
 mkdir -p "$APP_MACOS"
