@@ -55,6 +55,29 @@ final class PipelineSnapshotTests: XCTestCase {
         )
     }
 
+    func testSaveMakesSnapshotOwnerOnly() throws {
+        let dir = try makeTempDirectory(prefix: "pipeline-snapshot")
+        try PipelineSnapshot.save([], to: dir)
+        let snapshotPath = dir.appendingPathComponent(PipelineSnapshot.snapshotFilename)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: snapshotPath.path)
+        try PipelineSnapshot.save([], to: dir)
+        let permissions = try FileManager.default
+            .attributesOfItem(atPath: snapshotPath.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+    }
+
+    func testLoadTightensPermissionsOnAnExistingSnapshot() throws {
+        let dir = try makeTempDirectory(prefix: "pipeline-snapshot")
+        let snapshotPath = dir.appendingPathComponent(PipelineSnapshot.snapshotFilename)
+        try Data("[]".utf8).write(to: snapshotPath)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: snapshotPath.path)
+
+        XCTAssertEqual(try PipelineSnapshot.load(from: dir)?.count, 0)
+        let permissions = try FileManager.default
+            .attributesOfItem(atPath: snapshotPath.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+    }
+
     // MARK: - save: atomic replace cleans up the staging file
 
     func testSaveCleansUpStagingFile() throws {
