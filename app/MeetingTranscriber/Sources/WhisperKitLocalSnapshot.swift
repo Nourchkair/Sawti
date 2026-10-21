@@ -38,13 +38,24 @@ enum WhisperKitLocalSnapshot {
     /// present directory proves nothing while a file at its final path is whole.
     static let requiredFiles = ["coremldata.bin", "model.mil", "weights/weight.bin"]
 
-    /// The root WhisperKit's own downloader writes into. Taken from
-    /// `HubApiWrapper`, the API published for exactly this ("callers outside
-    /// ArgmaxCore have no dependency on the internal Hub types"), instead of
-    /// rebuilding `Documents/huggingface` by hand, so the two cannot drift and the
-    /// sandboxed build resolves it inside its container automatically.
+    /// Keep model weights in Sawti's Application Support tree instead of
+    /// WhisperKit's default `Documents/huggingface` cache. Documents can be
+    /// optimized by iCloud Drive; those files remain visible to `fileExists`
+    /// while their contents are evicted, which made a nominal local snapshot
+    /// fail when Wi-Fi was off. Application Support is app-owned, persistent,
+    /// and already resolves inside the container for the sandboxed build.
+    static var defaultDownloadBase: URL {
+        AppPaths.dataDir
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("whisperkit", isDirectory: true)
+    }
+
+    /// The repository folder WhisperKit's downloader writes into. Use its
+    /// published path API so the downloader, tokenizer, and local lookup share
+    /// the same root instead of rebuilding the repository layout by hand.
     static var defaultRepoRoot: URL {
-        HubApiWrapper.shared.localRepoLocation(HubApiWrapper.Repo(id: repoID, type: .models))
+        HubApiWrapper(downloadBase: defaultDownloadBase)
+            .localRepoLocation(HubApiWrapper.Repo(id: repoID, type: .models))
     }
 
     /// The folder holding a complete copy of `variant`, or nil when anything

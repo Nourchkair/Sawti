@@ -84,7 +84,16 @@ final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
     private func adoptPipe(variant: String, from folder: URL, source: WhisperKitModelSource) async throws {
         modelState = .loading
         downloadProgress = 1.0
-        pipe = try await source.makePipe(variant, folder)
+        if let makePipeOffMain = source.makePipeOffMain {
+            // WhisperKit performs substantial synchronous model/CoreML setup in
+            // its async initializer. Build it away from the main actor so the
+            // menu-bar item, settings, and local RPC remain responsive during
+            // a cold model load.
+            let transfer = try await makePipeOffMain(variant, folder)
+            pipe = transfer.pipe
+        } else {
+            pipe = try await source.makePipe(variant, folder)
+        }
         modelState = .loaded
 
         // A model change that landed mid-load set `modelVariant` but saw a nil
@@ -103,7 +112,17 @@ final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
     /// unusable, and the caller falls back to the download. That keeps a corrupt
     /// copy repairable instead of permanently unloadable.
     private func loadFromLocalSnapshot(variant: String, source: WhisperKitModelSource) async -> Bool {
-        guard let localFolder = source.locateLocal(variant) else { return false }
+        // `FileManager.fileExists` ultimately performs synchronous filesystem
+        // checks. WhisperKit keeps its model cache under Documents, where those
+        // checks can block while macOS resolves protected or cloud-backed paths.
+        // This method runs on the main actor, so keep the lookup on a utility
+        // executor; otherwise the menu-bar app can appear frozen before the
+        // status item is usable even though model loading itself is async.
+        let locateLocal = source.locateLocal
+        let localFolder = await Task.detached(priority: .utility) {
+            locateLocal(variant)
+        }.value
+        guard let localFolder else { return false }
         do {
             try await adoptPipe(variant: variant, from: localFolder, source: source)
             return true

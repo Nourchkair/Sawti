@@ -2,6 +2,31 @@
 import WhisperKit
 import XCTest
 
+private final class ThreadObservation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var mainThread = false
+    private var recorded = false
+
+    func recordCurrentThread() {
+        lock.lock()
+        mainThread = Thread.isMainThread
+        recorded = true
+        lock.unlock()
+    }
+
+    var wasRecorded: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return recorded
+    }
+
+    var ranOnMainThread: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return mainThread
+    }
+}
+
 /// Issue #736: with huggingface.co unreachable, `loadModel()` failed even though
 /// the model sat complete on disk. Reason on `WhisperKitLocalSnapshot`.
 ///
@@ -64,13 +89,15 @@ final class WhisperKitEngineModelSourceTests: XCTestCase {
         download: Result<URL, any Error>,
         pipe: Result<WhisperKit, any Error>,
         pipeFailsFor failingFolder: URL? = nil,
+        localLocator: (@Sendable (String) -> URL?)? = nil,
+        pipeBuilderOffMain: (@Sendable (String, URL) async throws -> WhisperKitPipeTransfer)? = nil,
         onDownload: (@MainActor (String) async -> Void)? = nil,
         onPipe: (@MainActor (String) async -> Void)? = nil,
     ) -> Recorder {
         let recorder = Recorder()
         engine.installModelSourceForTesting(
             WhisperKitModelSource(
-                locateLocal: { _ in local },
+                locateLocal: localLocator ?? { _ in local },
                 download: { variant, _ in
                     recorder.order.append("download")
                     recorder.downloadVariants.append(variant)
@@ -87,6 +114,7 @@ final class WhisperKitEngineModelSourceTests: XCTestCase {
                     }
                     return try pipe.get()
                 },
+                makePipeOffMain: pipeBuilderOffMain,
             ),
         )
         return recorder
@@ -114,6 +142,58 @@ final class WhisperKitEngineModelSourceTests: XCTestCase {
         )
         XCTAssertEqual(recorder.pipeFolders, [local], "The pipe must be built from the local folder")
         XCTAssertEqual(engine.downloadProgress, 1.0, accuracy: 0.001)
+    }
+
+    /// The local cache lookup uses synchronous filesystem checks, so doing it on
+    /// the main thread can make the menu-bar app look frozen while Whisper loads.
+    /// Return a cache hit only off the main thread: a regression then falls back
+    /// to the deliberately failing download and leaves the engine unloaded.
+    func testLocalSnapshotLookupRunsOffTheMainThread() async throws {
+        let engine = WhisperKitEngine()
+        let local = try makeTempDirectory(prefix: "wk-local-background")
+        let recorder = try await installRecordingSource(
+            on: engine,
+            local: nil,
+            download: .failure(URLError(.networkConnectionLost)),
+            pipe: .success(makeIdlePipe()),
+            // swiftlint:disable:next trailing_closure
+            localLocator: { _ in Thread.isMainThread ? nil : local },
+        )
+
+        await engine.loadModel()
+
+        XCTAssertEqual(engine.modelState, .loaded, "The local lookup must not block the main thread")
+        XCTAssertEqual(
+            recorder.order, ["pipe"],
+            "A main-thread lookup would miss the local model and try the failing download",
+        )
+    }
+
+    /// The WhisperKit initializer also configures CoreML and can take minutes on
+    /// a cold cache. Keep that synchronous work off the UI actor as well as the
+    /// filesystem lookup that precedes it.
+    func testLocalSnapshotPipeInitializationRunsOffTheMainThread() async throws {
+        let engine = WhisperKitEngine()
+        let local = try makeTempDirectory(prefix: "wk-pipe-background")
+        let observation = ThreadObservation()
+        _ = installRecordingSource(
+            on: engine,
+            local: local,
+            download: .failure(URLError(.networkConnectionLost)),
+            pipe: .failure(URLError(.networkConnectionLost)),
+            // swiftlint:disable:next trailing_closure
+            pipeBuilderOffMain: { _, _ in
+                observation.recordCurrentThread()
+                let pipe = try await WhisperKit(WhisperKitConfig(verbose: false, load: false, download: false))
+                return WhisperKitPipeTransfer(pipe: pipe)
+            },
+        )
+
+        await engine.loadModel()
+
+        XCTAssertTrue(observation.wasRecorded, "The test pipe builder must run")
+        XCTAssertFalse(observation.ranOnMainThread, "WhisperKit setup must run off the main thread")
+        XCTAssertEqual(engine.modelState, .loaded)
     }
 
     /// The guard against a silent regression in the other direction: a missing model
