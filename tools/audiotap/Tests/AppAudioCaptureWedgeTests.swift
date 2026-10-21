@@ -60,6 +60,25 @@ final class AppAudioCaptureWedgeTests: XCTestCase {
         }
     }
 
+    func testAWedgedInitialStartDoesNotBlockTheMainThreadAndGivesUp() {
+        let attempt = Attempt()
+        attempt.shouldWedge = true
+        let capture = makeCapture(attempt)
+        defer { attempt.release() }
+
+        let gaveUp = expectation(description: "initial app-audio start gives up")
+        capture.onGiveUp = { gaveUp.fulfill() }
+        capture.startOffMain()
+        wait(for: [attempt.entered], timeout: 5)
+
+        let mainIsAlive = expectation(description: "main queue still services work")
+        DispatchQueue.main.async { mainIsAlive.fulfill() }
+        wait(for: [mainIsAlive], timeout: 2)
+        wait(for: [gaveUp], timeout: RestartArbiter.attemptTimeout + 5)
+
+        XCTAssertFalse(capture.isRunning)
+    }
+
     func testAWedgedRestartDoesNotBlockTheMainThread() throws {
         let attempt = Attempt()
         let capture = makeCapture(attempt)

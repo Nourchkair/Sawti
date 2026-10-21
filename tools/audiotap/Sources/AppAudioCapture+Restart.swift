@@ -14,6 +14,82 @@ private let logger = Logger(subsystem: "com.meetingtranscriber.audiotap", catego
 /// run off the main queue, carry a generation, and are bounded by a deadline.
 @available(macOS 14.2, *)
 extension AppAudioCapture {
+    /// Start the first process tap without occupying the caller's thread.
+    /// CoreAudio's HAL calls can block indefinitely when `coreaudiod` stops
+    /// answering, so the app path uses the same generation and deadline safety
+    /// as device-change restarts. The synchronous `start()` remains available
+    /// to command-line callers that explicitly need an immediate result.
+    func startOffMain() {
+        guard case let .launchAttempt(generation) = restartArbiter.withLock({ state in
+            state.handle(.initialStartRequested)
+        }) else { return }
+
+        installOutputDeviceChangeListener()
+        logSilentTrackWatchdogArmed()
+        DispatchQueue.main.asyncAfter(deadline: .now() + RestartArbiter.attemptTimeout) { [weak self] in
+            self?.handleInitialStartTimeout(generation: generation)
+        }
+
+        restartQueue.async { [weak self] in
+            guard let self else { return }
+            var failed = false
+            var built: AppTapSession?
+            do {
+                built = try self.performAttempt()
+            } catch {
+                logger.error("Failed to start app audio capture: \(error.localizedDescription, privacy: .public)")
+                failed = true
+            }
+            let succeeded = !failed
+            let outcome = self.restartArbiter.withLock { state in
+                state.handle(.attemptReturned(generation: generation, succeeded: succeeded))
+            }
+            guard outcome != .rejectStale else {
+                logger.info("App audio: discarding an initial attempt that outlived its deadline or stop")
+                built?.destroy()
+                return
+            }
+            DispatchQueue.main.async {
+                self.finishInitialStart(generation: generation, failed: !succeeded, built: built)
+            }
+        }
+    }
+
+    private func finishInitialStart(generation: Int, failed: Bool, built: AppTapSession?) {
+        if failed {
+            guard case .giveUp = restartArbiter.withLock({ $0.handle(.retryBudgetExhausted) }) else { return }
+            logger.error("App audio: initial capture attempt failed; giving up on the app track")
+            markStoppedAfterGiveUp()
+            noteRestartGaveUpForWatchdog()
+            onGiveUp?()
+            return
+        }
+
+        guard case .adopt = restartArbiter.withLock({ $0.handle(.commitReady(generation: generation)) })
+        else {
+            logger.info("App audio: discarding an initial attempt that completed after the session was sealed")
+            built?.destroy()
+            return
+        }
+        if let built { install(built) }
+        isRunning = true
+        logger.info("App audio capture started (rate: \(self.actualSampleRate) Hz)")
+    }
+
+    /// The first attempt never returned. As with a wedged restart, do not touch
+    /// the HAL resources it may hold; seal the app track and let the independent
+    /// microphone channel and main app continue.
+    private func handleInitialStartTimeout(generation: Int) {
+        guard case .giveUp = restartArbiter.withLock({ $0.handle(.attemptTimedOut(generation: generation)) })
+        else { return }
+        logger.error(
+            "App audio: initial capture attempt did not return within \(RestartArbiter.attemptTimeout, privacy: .public)s — giving up on the app track",
+        )
+        markStoppedAfterGiveUp()
+        noteRestartGaveUpForWatchdog()
+        onGiveUp?()
+    }
+
     func handleOutputDeviceChanged() {
         // Before both guards: a change the restart path drops still moves the
         // device a watchdog rebuild's tap is built on.
