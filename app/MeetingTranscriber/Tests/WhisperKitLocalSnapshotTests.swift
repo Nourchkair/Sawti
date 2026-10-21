@@ -44,6 +44,14 @@ final class WhisperKitLocalSnapshotTests: XCTestCase {
         )
     }
 
+    func testDefaultCacheUsesSawtiApplicationSupportInsteadOfDocuments() {
+        let cache = WhisperKitLocalSnapshot.defaultDownloadBase.standardizedFileURL
+        let appData = AppPaths.dataDir.standardizedFileURL
+
+        XCTAssertTrue(cache.path.hasPrefix(appData.path + "/"))
+        XCTAssertFalse(cache.path.contains("/Documents/huggingface"))
+    }
+
     /// The load-bearing negative case. The Hub downloader creates a bundle
     /// directory before the files inside it arrive, so a partial copy has every
     /// directory in place and must still be rejected: serving it would hand
@@ -117,10 +125,10 @@ final class WhisperKitLocalSnapshotTests: XCTestCase {
     /// is derived from `defaultRepoRoot`, so a change in the *depth* of
     /// `HubApiWrapper.localRepoLocation` moves both and the test skips again (measured
     /// by mutation). Deriving the root independently would mean rebuilding
-    /// `Documents/huggingface` by hand, which is exactly the duplication the locator
-    /// avoids. That drift is a library contract rather than a name this repo borrowed,
-    /// and it would also break the online download path, which the real-model tests
-    /// cover.
+    /// HubApi's repository layout under `downloadBase`, which is exactly the
+    /// duplication the locator avoids. That drift is a library contract rather
+    /// than a name this repo borrowed, and it would also break the online download
+    /// path, which the real-model tests cover.
     @MainActor
     func testProductionLocatesARealFetchedModel() throws {
         try skipIfIsolatedModelRunWithoutOptIn("inspects the locally downloaded WhisperKit model cache")
