@@ -115,10 +115,10 @@ final class MenuBarIconSnapshotTests: XCTestCase {
         }
     }
 
-    func testInactiveUsesTheNativeSizedTemplateLogo() throws {
+    func testInactiveUsesTheNativeSizedWhiteLogo() throws {
         let image = MenuBarIcon.image(badge: .inactive)
 
-        XCTAssertTrue(image.isTemplate, "macOS must tint the idle mark for the current menu-bar appearance")
+        XCTAssertFalse(image.isTemplate, "the idle mark must retain its explicit white color")
         XCTAssertEqual(image.size, NSSize(width: 18, height: 18))
 
         let bitmap = try XCTUnwrap(
@@ -131,6 +131,14 @@ final class MenuBarIconSnapshotTests: XCTestCase {
             }.count
         }
         XCTAssertGreaterThan(visiblePixels, 100, "the menu-bar logo must have a visible alpha mask")
+    }
+
+    func testWatchingAddsTheStatusDotToTheIdleLogo() {
+        let idle = MenuBarIcon.image(badge: .inactive)
+        let watching = MenuBarIcon.image(badge: .inactive, isWatching: true)
+
+        XCTAssertNotEqual(idle.tiffRepresentation, watching.tiffRepresentation)
+        XCTAssertFalse(watching.isTemplate)
     }
 
     func testInactiveLogoIsTintedWhenRenderedWithAColoredOverlay() throws {

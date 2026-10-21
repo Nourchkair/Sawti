@@ -41,7 +41,8 @@ enum BadgeKind: String, CaseIterable, Codable {
 /// - `.diarizing`: bars split into two groups (speaker separation)
 /// - `.processing`: text lines appear sequentially (protocol being written)
 ///
-/// Rendered as template image — macOS handles light/dark mode automatically.
+/// The idle mark is explicitly white. Activity waveforms remain template images,
+/// allowing macOS to adapt them to the menu-bar appearance.
 /// `@MainActor` because cache initialisation, NSApp / NSAppearance reads, and
 /// `image(badge:…)` all need to run on the main actor. All known call sites
 /// (menu bar UI, `BadgeKind.compute(...)` consumers in AppState) are
@@ -94,10 +95,9 @@ enum MenuBarIcon {
             ?? Bundle.module.url(forResource: "SawtiLogo", withExtension: "png")
         guard let url, let image = NSImage(contentsOf: url) else { return nil }
         // The source PNG is 1254 px square. Keep its full-resolution bitmap but
-        // give AppKit the status-bar point size so the original template image
-        // can be assigned directly to NSStatusItem.button.image.
+        // give AppKit the status-bar point size for crisp menu-bar rendering.
         image.size = NSSize(width: 18, height: 18)
-        image.isTemplate = true
+        image.isTemplate = false
         return image
     }()
 
@@ -129,33 +129,32 @@ enum MenuBarIcon {
 
     // MARK: - Public
 
-    /// Returns a pre-rendered 18x18pt template `NSImage` for the given badge and animation frame.
+    /// Returns a pre-rendered 18x18pt `NSImage` for the given badge and animation frame.
     ///
-    /// If `permissionOverlay` or `recordOnlyOverlay` is true, a red badge is composited over
-    /// the base icon. If `micSilentOverlay` is true, the **top half** of the waveform bars is
-    /// filled in red — signalling the mic channel went silent. If `appSilentOverlay` is true,
-    /// the **bottom half** is red — signalling the app-audio channel went silent. The two are
-    /// independent; if both are true, both halves are red (effectively all-red bars).
-    /// Any of these bypass the pre-rendered cache and force a non-template image, because red
-    /// would not survive template rendering.
+    /// If `isWatching` is true while the idle mark is shown, or `permissionOverlay` or
+    /// `recordOnlyOverlay` is true, a red badge is composited over the base icon. If
+    /// `micSilentOverlay` is true, the **top half** of the waveform bars is filled in red —
+    /// signalling the mic channel went silent. If `appSilentOverlay` is true, the **bottom
+    /// half** is red — signalling the app-audio channel went silent. The two are independent;
+    /// if both are true, both halves are red (effectively all-red bars). These overlays bypass
+    /// the pre-rendered cache and force a non-template image, because red would not survive
+    /// template rendering.
     static func image(
         badge: BadgeKind,
+        isWatching: Bool = false,
         animationFrame: Int = 0,
         permissionOverlay: Bool = false,
         recordOnlyOverlay: Bool = false,
         micSilentOverlay: Bool = false,
         appSilentOverlay: Bool = false,
     ) -> NSImage {
+        // The watching indicator is only needed when the idle mark is shown.
+        // Recording and processing already have their own established badges.
+        let watchingOverlay = isWatching && badge == .inactive
         let hasOverlay = permissionOverlay || recordOnlyOverlay || micSilentOverlay || appSilentOverlay
-        if badge == .inactive, !hasOverlay, let officialLogo {
-            // Let AppKit tint the original alpha-mask PNG as a native template
-            // image. Rasterizing a template into another NSImage first can
-            // leave a black-on-transparent composite that is invisible in the
-            // dark menu bar on some macOS builds.
-            return officialLogo
-        }
+            || watchingOverlay
 
-        if permissionOverlay || recordOnlyOverlay || micSilentOverlay || appSilentOverlay {
+        if hasOverlay {
             // Honour the cache's frame discipline: animated badges advance, static ones
             // stay on frame 0. Without this, the live animationFrame leaks through and
             // makes `.inactive` (idle waveform) bounce as if recording.
@@ -166,6 +165,7 @@ enum MenuBarIcon {
                 recordOnlyOverlay: recordOnlyOverlay,
                 micSilentOverlay: micSilentOverlay,
                 appSilentOverlay: appSilentOverlay,
+                watchingOverlay: watchingOverlay,
             )
         }
         guard let frames = cache[badge] else { return renderImage(badge: badge, frame: animationFrame) }
@@ -181,12 +181,15 @@ enum MenuBarIcon {
         recordOnlyOverlay: Bool = false,
         micSilentOverlay: Bool = false,
         appSilentOverlay: Bool = false,
+        watchingOverlay: Bool = false,
     ) -> NSImage {
         let size = NSSize(width: 18, height: 18)
         // The `.error` badge and any red overlay all need an explicit foreground color
         // (matching the menu bar appearance), because the image is non-template (red marks
         // must stay red in both light and dark mode).
-        let needsExplicitForeground = badge == .error
+        let bodyBadge: BadgeKind = badge == .error && permissionOverlay ? .inactive : badge
+        let needsExplicitForeground = bodyBadge == .inactive
+            || badge == .error
             || permissionOverlay
             || recordOnlyOverlay
             || micSilentOverlay
@@ -199,7 +202,7 @@ enum MenuBarIcon {
         let isDark = NSApp?.effectiveAppearance
             .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         let image = NSImage(size: size, flipped: false) { rect in
-            let explicitForeground = isDark ? NSColor.white : NSColor.black
+            let explicitForeground = bodyBadge == .inactive || isDark ? NSColor.white : NSColor.black
             if needsExplicitForeground {
                 explicitForeground.setFill()
             } else {
@@ -212,7 +215,6 @@ enum MenuBarIcon {
             // let the red exclamation carry the warning; an actual recording
             // or transcription error without a permission problem keeps the
             // established waveform error icon.
-            let bodyBadge: BadgeKind = badge == .error && permissionOverlay ? .inactive : badge
             drawBadgeBody(badge: bodyBadge, in: rect, frame: frame, logoForeground: logoForeground)
 
             // Tint halves AFTER the base body is drawn. Clipping to the upper /
@@ -233,7 +235,7 @@ enum MenuBarIcon {
             // problem actually breaks recording, so the user must see it first.
             if permissionOverlay || badge == .error {
                 drawExclamationBadge(in: rect)
-            } else if recordOnlyOverlay {
+            } else if recordOnlyOverlay || watchingOverlay {
                 drawRecordOnlyBadge(in: rect)
             }
 
@@ -276,9 +278,8 @@ enum MenuBarIcon {
         }
     }
 
-    /// Idle uses the official logo as a template so macOS adapts it to the
-    /// current menu-bar appearance. If packaging is incomplete, keep the
-    /// previous static waveform visible rather than showing a blank item.
+    /// Idle uses the official white Sawti mark. If packaging is incomplete,
+    /// keep the previous static waveform visible rather than showing a blank item.
     private static func drawSawtiLogo(in rect: NSRect, foreground: NSColor? = nil) {
         guard let officialLogo else {
             drawRecordingAnimation(in: rect, frame: 0)
@@ -292,8 +293,7 @@ enum MenuBarIcon {
         )
         if let foreground, let context = NSGraphicsContext.current {
             // Preserve the logo's alpha silhouette while recoloring its pixels
-            // for a non-template image (for example, when a red permission
-            // badge is composited over it).
+            // for the explicit white menu-bar mark.
             let cgContext = context.cgContext
             cgContext.saveGState()
             cgContext.setBlendMode(.sourceAtop)

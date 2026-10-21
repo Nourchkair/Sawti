@@ -16,6 +16,7 @@ extension Notification.Name {
 /// and click/popover lifecycle; this view supplies its current visual state.
 private struct AnimatedMenuBarIcon: View {
     let badge: BadgeKind
+    let isWatching: Bool
     let permissionOverlay: Bool
     let recordOnlyOverlay: Bool
     let micSilentOverlay: Bool
@@ -29,6 +30,7 @@ private struct AnimatedMenuBarIcon: View {
     var body: some View {
         Image(nsImage: MenuBarIcon.image(
             badge: badge,
+            isWatching: isWatching,
             animationFrame: animationFrame,
             permissionOverlay: permissionOverlay,
             recordOnlyOverlay: recordOnlyOverlay,
@@ -167,8 +169,10 @@ struct MeetingTranscriberApp: App {
     private var menuBarLabel: some View {
         AnimatedMenuBarIcon(
             badge: appState.currentBadge,
+            isWatching: appState.isWatching,
             permissionOverlay: appState.hasPermissionProblem,
-            recordOnlyOverlay: appState.settings.recordOnly,
+            recordOnlyOverlay: appState.settings.recordOnly
+                && (appState.isWatching || appState.currentBadge == .recording),
             micSilentOverlay: appState.micSilentOverlay,
             appSilentOverlay: appState.appSilentOverlay,
         )

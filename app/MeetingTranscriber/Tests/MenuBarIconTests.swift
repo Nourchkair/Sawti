@@ -3,9 +3,9 @@ import XCTest
 
 @MainActor
 final class MenuBarIconTests: XCTestCase { // swiftlint:disable:this type_body_length
-    func testImageWithNoBadgeIsTemplate() {
+    func testIdleLogoIsExplicitWhiteAndNonTemplate() {
         let image = MenuBarIcon.image(badge: .inactive)
-        XCTAssertTrue(image.isTemplate)
+        XCTAssertFalse(image.isTemplate, "the white idle mark must keep its explicit color")
     }
 
     func testImageSizeIs18x18() {
@@ -21,8 +21,18 @@ final class MenuBarIconTests: XCTestCase { // swiftlint:disable:this type_body_l
 
         XCTAssertNotEqual(idle.tiffRepresentation, recordingFrame0.tiffRepresentation)
         XCTAssertNotEqual(recordingFrame0.tiffRepresentation, recordingFrame3.tiffRepresentation)
-        XCTAssertTrue(idle.isTemplate)
+        XCTAssertFalse(idle.isTemplate)
         XCTAssertTrue(recordingFrame0.isTemplate)
+    }
+
+    func testWatchingDotOnlyChangesTheIdleLogo() {
+        let idle = MenuBarIcon.image(badge: .inactive)
+        let watching = MenuBarIcon.image(badge: .inactive, isWatching: true)
+        XCTAssertNotEqual(idle.tiffRepresentation, watching.tiffRepresentation)
+
+        let recording = MenuBarIcon.image(badge: .recording, animationFrame: 2)
+        let recordingWhileWatching = MenuBarIcon.image(badge: .recording, isWatching: true, animationFrame: 2)
+        XCTAssertEqual(recording.tiffRepresentation, recordingWhileWatching.tiffRepresentation)
     }
 
     func testRecordOnlyOverlayProducesNonTemplateImageOverAnyBadge() {
@@ -107,7 +117,7 @@ final class MenuBarIconTests: XCTestCase { // swiftlint:disable:this type_body_l
     func testAllBadgeKindsProduceValidImages() {
         // Badges that paint a colored mark (red dot / exclamation) must stay non-template
         // so the color survives macOS's monochrome template tinting.
-        let nonTemplateBadges: Set<BadgeKind> = [.error]
+        let nonTemplateBadges: Set<BadgeKind> = [.inactive, .error]
         for badge in BadgeKind.allCases {
             let image = MenuBarIcon.image(badge: badge)
             if nonTemplateBadges.contains(badge) {
