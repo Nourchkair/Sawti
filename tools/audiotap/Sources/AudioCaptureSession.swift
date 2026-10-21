@@ -161,7 +161,7 @@ public class AudioCaptureSession {
             throw error
         }
 
-        logger.info("Capture session started (PIDs \(self.config.pids), rate: \(self.config.sampleRate), channels: \(self.config.channels))")
+        logger.info("Capture session start requested (PIDs \(self.config.pids), rate: \(self.config.sampleRate), channels: \(self.config.channels))")
     }
 
     /// Create the app track's output file and open a descriptor onto it, or nil
@@ -243,7 +243,16 @@ public class AudioCaptureSession {
         guard let handle else { return }
 
         let capture = Self.makeAppCapture(config, fileDescriptor: handle.fileDescriptor, attemptBody: appAttemptBody)
-        try capture.start()
+        if appAttemptBody == nil {
+            // Production's initial tap uses HAL calls that can block inside
+            // coreaudiod. Keep them off the app's main actor and bound the
+            // attempt so a stuck system service cannot freeze the UI/RPC.
+            capture.startOffMain()
+        } else {
+            // Keep injected hardware seams synchronous so ordering and failure
+            // tests continue to observe the exact start result.
+            try capture.start()
+        }
         appFileHandle = handle
         capture.onGiveUp = { [weak self] in self?.appCaptureGaveUp = true }
         capture.onSilentTrackWatchdogGaveUp = { [weak self] in self?.appSilentTrackWatchdogGaveUp = true }

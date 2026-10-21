@@ -59,6 +59,9 @@ struct RestartArbiter: Equatable {
     }
 
     enum Event: Equatable {
+        /// The first process-tap attempt is running away from the caller so a
+        /// wedged HAL call cannot freeze the app's main thread.
+        case initialStartRequested
         /// Capture started (or restarted) successfully.
         case startSucceeded
         /// The default input device changed underneath us.
@@ -128,6 +131,11 @@ struct RestartArbiter: Equatable {
 
     mutating func handle(_ event: Event) -> Action {
         switch (phase, event) {
+        case (.idle, .initialStartRequested):
+            generation += 1
+            phase = .attemptInFlight(generation: generation)
+            return .launchAttempt(generation: generation)
+
         case (.idle, .startSucceeded), (.capturing, .startSucceeded):
             phase = .capturing
             return .ignore
@@ -176,7 +184,8 @@ struct RestartArbiter: Equatable {
         // A watchdog whose attempt already reported back, or any control event in
         // a sealed session.
         case (_, .attemptTimedOut), (_, .deviceChanged), (_, .startSucceeded),
-             (_, .stopRequested), (_, .retryDue), (_, .retryBudgetExhausted):
+             (_, .initialStartRequested), (_, .stopRequested), (_, .retryDue),
+             (_, .retryBudgetExhausted):
             return .ignore
         }
     }
