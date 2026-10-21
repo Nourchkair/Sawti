@@ -104,6 +104,12 @@ struct SpeakersSettingsView: View {
         Section("Diarization") {
             Toggle("Speaker Diarization", isOn: $settings.diarize)
             if settings.diarize {
+                Label(
+                    "Teams, Zoom, and browser meetings can be named when Accessibility exposes a clear active-speaker label. Otherwise Sawti keeps generic or voice-matched names for manual review.",
+                    systemImage: "info.circle",
+                )
+                .foregroundStyle(.secondary)
+                .font(.caption)
                 diarizationModePicker
                 if settings.diarizerMode == .sortformer {
                     Label(

@@ -63,8 +63,9 @@ enum PermissionProblem: Equatable {
     /// microphone grant it never asks for cannot block it; a microphone-only
     /// recording opens no process tap, so Screen Recording cannot block it.
     ///
-    /// Accessibility never blocks: its only consumer is `ParticipantReader` (Teams
-    /// participant names, read in `handleMeeting`), which a recording does not need.
+    /// Accessibility never blocks: it only enriches speaker naming with Teams
+    /// roster suggestions and explicit active-speaker UI labels, which a
+    /// recording does not need.
     /// Settings labels it optional too, via `PermissionRow(optional: true)`, but that
     /// row is not independent corroboration: its wording promises a mute detection
     /// that does not exist, since mute handling is sample-level in `AudioMixer` and

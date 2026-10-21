@@ -77,10 +77,11 @@ final class WatchingController {
     ///
     /// `PermissionHealthCheck` already reports a missing Accessibility grant as
     /// a problem — red menu-bar badge plus a notification — because
-    /// `ParticipantReader` needs it to read the Teams roster via
-    /// `AXUIElementCreateApplication`. Without this call nothing ever showed the
-    /// prompt, so the app diagnosed the problem but never offered the fix and
-    /// the user had to find the Accessibility pane unaided.
+    /// `ParticipantReader` reads Teams roster suggestions and `ActiveSpeakerReader`
+    /// reads explicit speaking labels from Teams, Zoom, and consented Chromium
+    /// meetings via `AXUIElementCreateApplication`. Without this call nothing
+    /// ever showed the prompt, so the app diagnosed the problem but never offered
+    /// the fix and the user had to find the Accessibility pane unaided.
     ///
     /// It belongs at watch start for the same reason the Screen-Recording
     /// request does: the health check runs on every activation, so prompting
@@ -90,8 +91,7 @@ final class WatchingController {
     /// control is the most invasive grant on macOS and this one only enriches a
     /// recording. It fires only from a user-initiated toggle, since auto-watch
     /// otherwise raises a system alert three seconds after every launch with no
-    /// click of any kind; only when `watchTeams` is on, since the roster read is
-    /// the grant's sole consumer and is itself Teams-gated; and the production
+    /// click of any kind; only when a supported meeting route is enabled; and the production
     /// default is compiled out of the sandboxed build, which cannot use the API
     /// against another process at all.
     ///
@@ -279,7 +279,7 @@ final class WatchingController {
     private func requestStartPermissions(userInitiated: Bool) async {
         _ = await ensureMicAccess()
         requestScreenRecording()
-        if userInitiated, settings.watchTeams {
+        if userInitiated, settings.watchTeams || settings.watchZoom || settings.watchBrowserMeetings {
             requestAccessibility()
         }
     }
