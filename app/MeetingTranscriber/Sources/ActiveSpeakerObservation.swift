@@ -47,21 +47,20 @@ enum ActiveSpeakerCueParser {
     }
 
     private static func nameInSpeakingSentence(_ text: String) -> String? {
-        let lower = text.lowercased()
         for marker in speakingMarkers {
-            guard let range = lower.range(of: marker) else { continue }
+            guard let range = text.range(of: marker, options: [.caseInsensitive]) else { continue }
             let prefix = String(text[..<range.lowerBound])
             if let name = cleanName(prefix) { return name }
         }
 
         let markerForms = ["active speaker:", "currently speaking:", "speaking:"]
         for marker in markerForms {
-            guard let range = lower.range(of: marker) else { continue }
+            guard let range = text.range(of: marker, options: [.caseInsensitive]) else { continue }
             let suffix = String(text[range.upperBound...])
             if let name = cleanName(suffix) { return name }
         }
 
-        if let range = lower.range(of: "active speaker") {
+        if let range = text.range(of: "active speaker", options: [.caseInsensitive]) {
             let before = String(text[..<range.lowerBound])
             let after = String(text[range.upperBound...])
             if let name = cleanName(before) { return name }

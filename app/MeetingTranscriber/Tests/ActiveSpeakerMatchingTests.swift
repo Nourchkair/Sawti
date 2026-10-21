@@ -17,6 +17,16 @@ final class ActiveSpeakerMatchingTests: XCTestCase {
         )
     }
 
+    func testParsesUnicodeNamesWithoutShiftingSpeakingMarkerRanges() {
+        XCTAssertEqual(ActiveSpeakerCueParser.name(from: ["İpek is speaking"]), "İpek")
+        XCTAssertEqual(ActiveSpeakerCueParser.name(from: ["İSMAİL is currently speaking"]), "İSMAİL")
+        XCTAssertEqual(
+            ActiveSpeakerCueParser.name(from: ["İpek mentions active speaker: Bob Singh"]),
+            "Bob Singh",
+        )
+        XCTAssertEqual(ActiveSpeakerCueParser.name(from: ["İpek active speaker"]), "İpek")
+    }
+
     func testDoesNotTreatFocusOrRosterPresenceAsSpeakingEvidence() {
         XCTAssertNil(ActiveSpeakerCueParser.name(from: ["Alice Johnson", "Bob Singh"]))
         XCTAssertNil(ActiveSpeakerCueParser.name(from: ["Alice Johnson", "Focused"] ))
