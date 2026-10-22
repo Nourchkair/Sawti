@@ -12,9 +12,11 @@ struct RecordingLibraryWindow: View {
     @State private var recordings: [RecordingLibraryItem] = []
     @State private var selectedID: String?
     @State private var searchText = ""
+    @State private var courseFilter = RecordingCourseFilter.all
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var activeReloadID: UUID?
+    @State private var transcriptSearchIndex: [String: String] = [:]
 
     private var entries: [RecordingLibraryItem] {
         var combined = recordings
@@ -30,12 +32,25 @@ struct RecordingLibraryWindow: View {
 
     private var filteredEntries: [RecordingLibraryItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return entries }
         return entries.filter { item in
-            [item.title, item.appName ?? "", item.participants.joined(separator: " "), item.statusLabel]
-                .joined(separator: " ")
-                .lowercased()
-                .contains(query)
+            let courseMatches: Bool
+            switch courseFilter {
+            case .all: courseMatches = true
+            case .unassigned: courseMatches = item.course?.isEmpty != false
+            case let .named(course): courseMatches = item.course == course
+            }
+            guard courseMatches else { return false }
+            guard !query.isEmpty else { return true }
+            let metadata = [item.title, item.appName ?? "", item.participants.joined(separator: " "),
+                            item.course ?? "", item.statusLabel]
+                .joined(separator: " ").lowercased()
+            return metadata.contains(query) || (transcriptSearchIndex[item.id] ?? "").contains(query)
+        }
+    }
+
+    private var availableCourses: [String] {
+        Array(Set(entries.compactMap(\.course).filter { !$0.isEmpty })).sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
         }
     }
 
@@ -70,6 +85,7 @@ struct RecordingLibraryWindow: View {
                     item: selectedEntry,
                     outputDirectory: outputDirectory,
                     onOpenTranscript: onOpenTranscript,
+                    onCourseChanged: { course in updateCourse(for: selectedEntry, to: course) },
                 )
                 .id(selectedEntry.id)
             } else if isLoading {
@@ -95,13 +111,27 @@ struct RecordingLibraryWindow: View {
                 selectedID = filteredEntries.first?.id
             }
         }
+        .onChange(of: courseFilter) { _, _ in
+            if !filteredEntries.contains(where: { $0.id == selectedID }) {
+                selectedID = filteredEntries.first?.id
+            }
+        }
     }
 
     private var libraryList: some View {
         VStack(spacing: 0) {
-            TextField("Search recordings", text: $searchText)
+            TextField("Search recordings and transcripts", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .padding(12)
+
+            Picker("Course", selection: $courseFilter) {
+                Text("All Courses").tag(RecordingCourseFilter.all)
+                Text("Unassigned").tag(RecordingCourseFilter.unassigned)
+                ForEach(availableCourses, id: \.self) { course in
+                    Text(course).tag(RecordingCourseFilter.named(course))
+                }
+            }
+            .padding([.horizontal, .bottom], 10)
 
             if isLoading, entries.isEmpty {
                 ProgressView("Loading…")
@@ -112,7 +142,7 @@ struct RecordingLibraryWindow: View {
                     systemImage: searchText.isEmpty ? "waveform" : "magnifyingglass",
                     description: Text(searchText.isEmpty
                         ? "Completed transcripts and saved recordings will appear here."
-                        : "Try another title, app, or participant name."),
+                        : "Try another title, participant, course, or phrase from a transcript."),
                 )
             } else {
                 List(selection: $selectedID) {
@@ -146,6 +176,19 @@ struct RecordingLibraryWindow: View {
             }.value
             guard activeReloadID == reloadID else { return }
             recordings = loaded
+            transcriptSearchIndex = await Task.detached(priority: .utility) {
+                let openedScope = directory.startAccessingSecurityScopedResource()
+                defer { if openedScope { directory.stopAccessingSecurityScopedResource() } }
+                return Dictionary(uniqueKeysWithValues: loaded.map { item in
+                    let urls = [item.transcriptURL, item.originalTranscriptURL].compactMap { $0 }
+                    let text = urls.compactMap { url -> String? in
+                        guard let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+                        let corrected = TranscriptEditorDocumentStore.correctedTranscript(for: url)
+                        return [corrected ?? source, source].joined(separator: "\n")
+                    }.joined(separator: "\n")
+                    return (item.id, text.lowercased())
+                })
+            }.value
             if selectedID == nil || !entries.contains(where: { $0.id == selectedID }) {
                 selectedID = entries.first?.id
             }
@@ -157,6 +200,31 @@ struct RecordingLibraryWindow: View {
         activeReloadID = nil
         isLoading = false
     }
+
+    private func updateCourse(for item: RecordingLibraryItem, to course: String) {
+        do {
+            try RecordingLibraryIndex.updateCourse(for: item, course: course, outputDirectory: outputDirectory)
+            let normalized = course.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let index = recordings.firstIndex(where: { $0.id == item.id }) {
+                let old = recordings[index]
+                recordings[index] = RecordingLibraryItem(
+                    id: old.id, title: old.title, recordedAt: old.recordedAt, appName: old.appName,
+                    participants: old.participants, course: normalized.isEmpty ? nil : normalized,
+                    bookmarks: old.bookmarks, transcriptURL: old.transcriptURL,
+                    originalTranscriptURL: old.originalTranscriptURL, protocolURL: old.protocolURL,
+                    audioURL: old.audioURL, pipelineStatus: old.pipelineStatus, error: old.error,
+                )
+            }
+        } catch {
+            loadError = "Sawti could not save this course label. Check access to the output folder."
+        }
+    }
+}
+
+private enum RecordingCourseFilter: Hashable {
+    case all
+    case unassigned
+    case named(String)
 }
 
 private struct RecordingLibraryRow: View {
@@ -183,6 +251,12 @@ private struct RecordingLibraryRow: View {
                 Text(item.statusLabel)
                     .font(.caption2)
                     .foregroundStyle(item.error == nil ? Color.secondary : Color.red)
+                if let course = item.course, !course.isEmpty {
+                    Text(course)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.vertical, 3)
@@ -194,10 +268,12 @@ private struct RecordingLibraryDetail: View {
     let item: RecordingLibraryItem
     let outputDirectory: URL
     let onOpenTranscript: (URL) -> Void
+    let onCourseChanged: (String) -> Void
 
     @StateObject private var playback = RecordingAudioPlayback()
     @State private var transcriptText: String?
     @State private var transcriptLoadFailed = false
+    @State private var course = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -205,7 +281,10 @@ private struct RecordingLibraryDetail: View {
             Divider()
             transcriptBody
         }
-        .task(id: item.transcriptURL) { await loadTranscript() }
+        .task(id: item.id) {
+            course = item.course ?? ""
+            await loadTranscript()
+        }
         .onDisappear { playback.stop() }
     }
 
@@ -228,6 +307,18 @@ private struct RecordingLibraryDetail: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+            }
+
+            HStack(spacing: 8) {
+                TextField("Course (optional)", text: $course)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 260)
+                    .disabled(!canSaveCourse)
+                Button("Save Course") { onCourseChanged(course) }
+                    .disabled(!canSaveCourse || course.trimmingCharacters(in: .whitespacesAndNewlines) == (item.course ?? ""))
+                Text(canSaveCourse ? "Saved locally with this recording" : "Available after processing finishes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 8) {
@@ -263,6 +354,35 @@ private struct RecordingLibraryDetail: View {
             }
             .buttonStyle(.bordered)
 
+            if playback.duration > 0 {
+                HStack(spacing: 10) {
+                    Text(playback.currentTime.formatted(.number.precision(.fractionLength(0))))
+                        .font(.caption.monospacedDigit())
+                    Slider(
+                        value: Binding(get: { playback.currentTime }, set: { playback.seek(to: $0) }),
+                        in: 0...max(1, playback.duration),
+                    )
+                    Text(playback.duration.formatted(.number.precision(.fractionLength(0))))
+                        .font(.caption.monospacedDigit())
+                }
+                .frame(maxWidth: 440)
+            }
+
+            if !item.bookmarks.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Bookmarks").font(.headline)
+                    ForEach(item.bookmarks.sorted { $0.offset < $1.offset }) { bookmark in
+                        Button {
+                            guard let audioURL = item.audioURL else { return }
+                            playback.play(audioURL, outputDirectory: outputDirectory, at: bookmark.offset)
+                        } label: {
+                            Label("\(bookmark.offset.formatted(.number.precision(.fractionLength(0))))s · \(bookmark.title)", systemImage: "bookmark.fill")
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
+            }
+
             HStack(spacing: 8) {
                 Circle()
                     .fill(item.error == nil ? Color.accentColor : Color.red)
@@ -279,6 +399,10 @@ private struct RecordingLibraryDetail: View {
             }
         }
         .padding(20)
+    }
+
+    private var canSaveCourse: Bool {
+        !item.id.hasPrefix("job-")
     }
 
     @ViewBuilder private var transcriptBody: some View {
@@ -320,7 +444,8 @@ private struct RecordingLibraryDetail: View {
             defer {
                 if openedScope { directory.stopAccessingSecurityScopedResource() }
             }
-            return try? String(contentsOf: transcriptURL, encoding: .utf8)
+            guard let source = try? String(contentsOf: transcriptURL, encoding: .utf8) else { return nil }
+            return TranscriptEditorDocumentStore.correctedTranscript(for: transcriptURL) ?? source
         }.value
         transcriptText = content
         transcriptLoadFailed = content == nil
@@ -328,31 +453,40 @@ private struct RecordingLibraryDetail: View {
 }
 
 @MainActor
-private final class RecordingAudioPlayback: ObservableObject {
+final class RecordingAudioPlayback: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var error: String?
+    @Published private(set) var currentTime: TimeInterval = 0
+    @Published private(set) var duration: TimeInterval = 0
 
     private var player: AVAudioPlayer?
     private var scopedURL: URL?
     private var finishTask: Task<Void, Never>?
 
-    func play(_ audioURL: URL, outputDirectory: URL) {
+    func play(_ audioURL: URL, outputDirectory: URL, at offset: TimeInterval = 0) {
         stop()
         error = nil
         let accessRoot = Self.isInside(audioURL, directory: outputDirectory) ? outputDirectory : audioURL
         let openedScope = accessRoot.startAccessingSecurityScopedResource()
         do {
             let newPlayer = try AVAudioPlayer(contentsOf: audioURL)
+            newPlayer.currentTime = min(max(0, offset), newPlayer.duration)
             guard newPlayer.play() else {
                 if openedScope { accessRoot.stopAccessingSecurityScopedResource() }
                 error = "Sawti could not start audio playback."
                 return
             }
             player = newPlayer
+            duration = newPlayer.duration
+            currentTime = newPlayer.currentTime
             scopedURL = openedScope ? accessRoot : nil
             isPlaying = true
             finishTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(max(1, newPlayer.duration)))
+                while !Task.isCancelled, newPlayer.isPlaying {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    guard !Task.isCancelled else { return }
+                    self?.currentTime = newPlayer.currentTime
+                }
                 guard !Task.isCancelled else { return }
                 self?.stop()
             }
@@ -368,10 +502,18 @@ private final class RecordingAudioPlayback: ObservableObject {
         player?.stop()
         player = nil
         isPlaying = false
+        currentTime = 0
+        duration = 0
         if let scopedURL {
             scopedURL.stopAccessingSecurityScopedResource()
             self.scopedURL = nil
         }
+    }
+
+    func seek(to time: TimeInterval) {
+        guard let player else { return }
+        player.currentTime = min(max(0, time), player.duration)
+        currentTime = player.currentTime
     }
 
     private static func isInside(_ file: URL, directory: URL) -> Bool {

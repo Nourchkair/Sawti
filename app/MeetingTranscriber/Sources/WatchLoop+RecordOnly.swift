@@ -15,6 +15,7 @@ extension WatchLoop {
         recording: RecordingResult,
         trigger: RecordingSidecar.Trigger,
         participants: [String],
+        bookmarks: [RecordingBookmark] = [],
     ) throws {
         let startedAt = recording.recordingStartDate
         // Guard the sidecar's startedAt <= stoppedAt invariant against a
@@ -57,6 +58,11 @@ extension WatchLoop {
             micFilename: movedMic?.lastPathComponent,
         )
         try sidecar.write(toDirectory: destDir, basename: basename)
+        do {
+            try RecordingBookmarksStore.write(bookmarks, to: destDir, basename: basename)
+        } catch {
+            logger.warning("Record-only bookmarks could not be saved: \(error.localizedDescription, privacy: .private)")
+        }
         logger.info("Record-only: wrote sidecar + WAVs to \(destDir.path) for \(title, privacy: .private)")
     }
 

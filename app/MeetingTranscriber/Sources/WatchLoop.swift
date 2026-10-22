@@ -23,6 +23,8 @@ class WatchLoop {
 
     // Manual recording
     private(set) var manualRecordingInfo: ManualRecordingInfo?
+    private(set) var recordingStartedUptime: TimeInterval?
+    private(set) var recordingBookmarks: [RecordingBookmark] = []
     /// Exposed for read-only access — AppState's per-channel level monitor polls
     /// `appLevelDBFS` / `micLevelDBFS` here at ~10 Hz to drive the asymmetric-silence
     /// indicator. Setter stays private so the recording lifecycle flows through
@@ -32,6 +34,14 @@ class WatchLoop {
 
     var isManualRecording: Bool {
         manualRecordingInfo != nil
+    }
+
+    func addBookmark(title: String = "Bookmark") {
+        guard state == .recording, let recordingStartedUptime else { return }
+        recordingBookmarks.append(RecordingBookmark(
+            offset: ProcessInfo.processInfo.systemUptime - recordingStartedUptime,
+            title: title,
+        ))
     }
 
     // Dependencies
@@ -249,6 +259,8 @@ class WatchLoop {
 
         let pid = source.appPID
         activeRecorder = recorder
+        recordingStartedUptime = ProcessInfo.processInfo.systemUptime
+        recordingBookmarks = []
         update { next in
             next.phase = .recording
             next.manualRecordingInfo = ManualRecordingInfo(pid: pid, appName: appName, title: title)
@@ -274,7 +286,11 @@ class WatchLoop {
         do {
             let recording = try recorder.stop()
             enqueueRecording(
-                title: info.title, appName: info.appName, recording: recording, trigger: .manual,
+                title: info.title,
+                appName: info.appName,
+                recording: recording,
+                trigger: .manual,
+                bookmarks: recordingBookmarks,
             )
         } catch {
             logger.error("Failed to stop manual recording: \(error.localizedDescription, privacy: .public)")
@@ -282,6 +298,8 @@ class WatchLoop {
         }
 
         activeRecorder = nil
+        recordingStartedUptime = nil
+        recordingBookmarks = []
         update { next in
             next.phase = .idle
             next.manualRecordingInfo = nil
@@ -294,6 +312,8 @@ class WatchLoop {
         manualRecordingTask?.cancel()
         manualRecordingTask = nil
         activeRecorder = nil
+        recordingStartedUptime = nil
+        recordingBookmarks = []
         update { next in next.manualRecordingInfo = nil }
     }
 
@@ -374,6 +394,8 @@ class WatchLoop {
             debugLogging: verboseDiagnostics(),
         )
         activeRecorder = recorder
+        recordingStartedUptime = ProcessInfo.processInfo.systemUptime
+        recordingBookmarks = []
         defer { activeRecorder = nil }
 
         let activeSpeakerTimeline: ActiveSpeakerTimeline?
@@ -445,7 +467,10 @@ class WatchLoop {
             trigger: .auto,
             participants: participants,
             activeSpeakerIntervals: activeSpeakerIntervals,
+            bookmarks: recordingBookmarks,
         )
+        recordingStartedUptime = nil
+        recordingBookmarks = []
     }
 
     /// The native Teams and Zoom clients plus consented Chromium meeting
@@ -499,6 +524,7 @@ class WatchLoop {
         trigger: RecordingSidecar.Trigger,
         participants: [String] = [],
         activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
+        bookmarks: [RecordingBookmark] = [],
     ) {
         if recordOnly() {
             do {
@@ -508,6 +534,7 @@ class WatchLoop {
                     recording: recording,
                     trigger: trigger,
                     participants: participants,
+                    bookmarks: bookmarks,
                 )
             } catch {
                 // Error left redacted: a sidecar/WAV write error embeds the
@@ -538,6 +565,7 @@ class WatchLoop {
             micDelay: recording.micDelay,
             participants: participants,
             activeSpeakerIntervals: activeSpeakerIntervals,
+            bookmarks: bookmarks,
             meetingStartTime: recording.recordingStartDate,
         )
         pipelineQueue?.enqueue(job)

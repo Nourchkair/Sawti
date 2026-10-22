@@ -146,6 +146,10 @@ struct MeetingTranscriberApp: App {
             onStopManualRecording: appState.isManualRecording ? {
                 appState.watching.stopManualRecording()
             } : nil,
+            onAddBookmark: appState.watching.isRecording ? {
+                appState.watching.addBookmark()
+            } : nil,
+            recordingBookmarkCount: appState.watching.recordingBookmarkCount,
             onOpenLastProtocol: openLastProtocol,
             onOpenProtocol: { url in NSWorkspace.shared.open(url) },
             onViewTranscript: { url in

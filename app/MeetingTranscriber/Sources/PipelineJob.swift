@@ -75,6 +75,9 @@ struct PipelineJob: Identifiable, Codable {
     /// Explicit active-speaker UI observations captured during a live meeting.
     /// Optional so queue snapshots written before this feature continue decoding.
     var activeSpeakerIntervals: [ActiveSpeakerInterval]?
+    /// User-marked moments captured during the source recording. Optional so
+    /// saved queue snapshots from earlier versions continue decoding.
+    var bookmarks: [RecordingBookmark]?
     let enqueuedAt: Date
     /// Wall-clock time the recording started (meeting start), captured directly
     /// by the recorder at start (`RecordingResult.recordingStartDate`), not
@@ -269,6 +272,7 @@ struct PipelineJob: Identifiable, Codable {
         micDelay: TimeInterval,
         participants: [String] = [],
         activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
+        bookmarks: [RecordingBookmark]? = nil,
         meetingStartTime: Date? = nil,
         autoSkipNaming: Bool = false,
         // swiftlint:disable:next discouraged_optional_boolean
@@ -285,6 +289,7 @@ struct PipelineJob: Identifiable, Codable {
         self.micDelay = micDelay
         self.participants = participants
         self.activeSpeakerIntervals = activeSpeakerIntervals
+        self.bookmarks = bookmarks
         self.enqueuedAt = Date()
         self.meetingStartTime = meetingStartTime
         self.state = .waiting

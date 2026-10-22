@@ -179,6 +179,10 @@ final class WatchingController {
         watchLoop?.state == .recording
     }
 
+    var recordingBookmarkCount: Int {
+        watchLoop?.recordingBookmarks.count ?? 0
+    }
+
     /// Whether a manual (app-picker) recording owns the loop, or is on its way
     /// to owning it. Exposed because `toggleWatching` silently refuses in that
     /// state, and a silent refusal is invisible to a remote caller — the
@@ -527,6 +531,10 @@ final class WatchingController {
     func stopManualRecording() {
         watchLoop?.stopManualRecording()
         watchLoop = nil
+    }
+
+    func addBookmark() {
+        watchLoop?.addBookmark()
     }
 
     // MARK: - State-change handler

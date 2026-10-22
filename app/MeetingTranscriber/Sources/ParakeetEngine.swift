@@ -113,6 +113,16 @@ final class ParakeetEngine: TranscribingEngine, StreamingTranscribingEngine {
         }
     }
 
+    /// Releases the ASR model so the in-app engine comparison can measure one
+    /// backend at a time on low-memory Macs.
+    func unloadModel() {
+        asrManager = nil
+        vocabularyBooster = nil
+        vocabularyPreparationState = nil
+        modelState = .unloaded
+        downloadProgress = 0
+    }
+
     private func ensureModel() async throws {
         if asrManager != nil { return }
         #if DEBUG

@@ -14,13 +14,15 @@ struct RecordingLibraryMetadata: Codable, Sendable {
     let appName: String
     let recordedAt: Date
     let participants: [String]
+    let course: String?
 
-    init(title: String, appName: String, recordedAt: Date, participants: [String]) {
+    init(title: String, appName: String, recordedAt: Date, participants: [String], course: String? = nil) {
         version = Self.currentVersion
         self.title = title
         self.appName = appName
         self.recordedAt = recordedAt
         self.participants = participants
+        self.course = course
     }
 
     func write(toDirectory directory: URL, basename: String) throws {
@@ -52,6 +54,8 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
     let recordedAt: Date
     let appName: String?
     let participants: [String]
+    let course: String?
+    let bookmarks: [RecordingBookmark]
     let transcriptURL: URL?
     let originalTranscriptURL: URL?
     let protocolURL: URL?
@@ -74,6 +78,8 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
             recordedAt: recordedAt,
             appName: appName,
             participants: participants,
+            course: course,
+            bookmarks: bookmarks,
             transcriptURL: job.transcriptPath ?? transcriptURL,
             originalTranscriptURL: originalTranscriptURL,
             protocolURL: job.protocolPath ?? protocolURL,
@@ -90,6 +96,8 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
             recordedAt: job.artifactStartTime,
             appName: job.appName,
             participants: job.participants,
+            course: nil,
+            bookmarks: job.bookmarks ?? [],
             transcriptURL: job.transcriptPath,
             originalTranscriptURL: job.rawTranscriptPath,
             protocolURL: job.protocolPath,
@@ -109,6 +117,8 @@ enum RecordingLibraryIndex {
         var recordedAt: Date
         var appName: String?
         var participants: [String] = []
+        var course: String?
+        var bookmarks: [RecordingBookmark] = []
         var transcriptURL: URL?
         var originalTranscriptURL: URL?
         var protocolURL: URL?
@@ -121,6 +131,8 @@ enum RecordingLibraryIndex {
                 recordedAt: recordedAt,
                 appName: appName,
                 participants: participants,
+                course: course,
+                bookmarks: bookmarks,
                 transcriptURL: transcriptURL,
                 originalTranscriptURL: originalTranscriptURL,
                 protocolURL: protocolURL,
@@ -186,6 +198,12 @@ enum RecordingLibraryIndex {
                 entry.appName = metadata.appName
                 entry.recordedAt = metadata.recordedAt
                 entry.participants = metadata.participants
+                entry.course = metadata.course
+                builders[id] = entry
+            } else if name.hasSuffix(RecordingBookmarksStore.filenameSuffix) {
+                let id = String(name.dropLast(RecordingBookmarksStore.filenameSuffix.count))
+                var entry = builder(for: id, source: file)
+                entry.bookmarks = RecordingBookmarksStore.read(from: recordingsDirectory, basename: id)
                 builders[id] = entry
             } else if name.hasSuffix(RecordingSidecar.filenameSuffix) {
                 let id = String(name.dropLast(RecordingSidecar.filenameSuffix.count))
@@ -217,6 +235,20 @@ enum RecordingLibraryIndex {
                 if $0.recordedAt == $1.recordedAt { return $0.id > $1.id }
                 return $0.recordedAt > $1.recordedAt
             }
+    }
+
+    static func updateCourse(for item: RecordingLibraryItem, course: String, outputDirectory: URL) throws {
+        let openedScope = outputDirectory.startAccessingSecurityScopedResource()
+        defer { if openedScope { outputDirectory.stopAccessingSecurityScopedResource() } }
+        let recordingsDirectory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
+        let trimmedCourse = course.trimmingCharacters(in: .whitespacesAndNewlines)
+        try RecordingLibraryMetadata(
+            title: item.title,
+            appName: item.appName ?? "Unknown",
+            recordedAt: item.recordedAt,
+            participants: item.participants,
+            course: trimmedCourse.isEmpty ? nil : trimmedCourse,
+        ).write(toDirectory: recordingsDirectory, basename: item.id)
     }
 
     private static func files(in directory: URL, fileManager: FileManager) throws -> [URL] {

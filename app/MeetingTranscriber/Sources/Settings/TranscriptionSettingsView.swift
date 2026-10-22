@@ -24,6 +24,11 @@ struct TranscriptionSettingsView: View {
         Form {
             transcriptionSection
             liveTranscriptionSection
+            EngineComparisonView(
+                settings: settings,
+                whisperKitEngine: whisperKitEngine,
+                parakeetEngine: parakeetEngine,
+            )
         }
         .formStyle(.grouped)
     }

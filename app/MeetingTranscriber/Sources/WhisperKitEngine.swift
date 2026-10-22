@@ -269,7 +269,7 @@ final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
     /// by `applyModelVariant` and `adoptPipe`'s mid-load reconcile. The load
     /// `catch` deliberately does NOT call this — a failed *reload* keeps the
     /// prior pipe rather than clobbering a still-good model.
-    private func unloadModel() {
+    func unloadModel() {
         pipe = nil
         modelState = .unloaded
         downloadProgress = 0

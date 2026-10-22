@@ -18,6 +18,8 @@ struct MenuBarView: View {
     /// to avoid on the picker.
     let manualRecordingPendingOrActive: Bool
     let onStopManualRecording: (() -> Void)?
+    var onAddBookmark: (() -> Void)? = nil
+    var recordingBookmarkCount = 0
     let onOpenLastProtocol: () -> Void
     let onOpenProtocol: (URL) -> Void
     var onViewTranscript: ((URL) -> Void)? = nil
@@ -157,6 +159,18 @@ struct MenuBarView: View {
                 Label("Record App...", systemImage: "record.circle")
             }
             .keyboardShortcut("r")
+        }
+
+        if let onAddBookmark {
+            Button {
+                onAddBookmark()
+            } label: {
+                Label(
+                    recordingBookmarkCount > 0 ? "Bookmark Moment (\(recordingBookmarkCount))" : "Bookmark Moment",
+                    systemImage: "bookmark.fill",
+                )
+            }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
         }
 
         if let onNameSpeakers {

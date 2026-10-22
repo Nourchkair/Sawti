@@ -26,6 +26,7 @@ extension PipelineQueue {
         let micDelay: TimeInterval
         let participants: [String]
         let activeSpeakerIntervals: [ActiveSpeakerInterval]?
+        let bookmarks: [RecordingBookmark]
         /// Persisted-file basename, computed once from title + jobID + the
         /// meeting-start time so the transcript, protocol, diarization and
         /// audio stages all agree on the same `\(slug)` stem.
@@ -125,6 +126,7 @@ extension PipelineQueue {
             micDelay: job.micDelay,
             participants: job.participants,
             activeSpeakerIntervals: job.activeSpeakerIntervals,
+            bookmarks: job.bookmarks ?? [],
             // Anchor the basename on the meeting start; reimport/orphan jobs
             // have no recorded start, so fall back to the enqueue time.
             slug: namingSlug(title: job.meetingTitle, jobID: job.id, startTime: job.artifactStartTime),
@@ -889,16 +891,23 @@ extension PipelineQueue {
         )
 
         do {
+            let existingCourse = RecordingLibraryMetadata.read(fromDirectory: recordingsDir, basename: ctx.slug)?.course
             try RecordingLibraryMetadata(
                 title: ctx.title,
                 appName: ctx.appName,
                 recordedAt: ctx.recordedAt,
                 participants: ctx.participants,
+                course: existingCourse,
             ).write(toDirectory: recordingsDir, basename: ctx.slug)
         } catch {
             logger.warning(
                 "[\(ctx.shortID, privacy: .public)] recording library metadata could not be saved: \(error.localizedDescription, privacy: .private)",
             )
+        }
+        do {
+            try RecordingBookmarksStore.write(ctx.bookmarks, to: recordingsDir, basename: ctx.slug)
+        } catch {
+            logger.warning("[\(ctx.shortID, privacy: .public)] recording bookmarks could not be saved: \(error.localizedDescription, privacy: .private)")
         }
 
         // --- Persist 16kHz audio for re-diarization (move instead of copy to avoid double I/O) ---
