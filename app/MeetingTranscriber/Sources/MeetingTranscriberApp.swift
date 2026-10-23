@@ -156,7 +156,6 @@ struct MeetingTranscriberApp: App {
                 openWindow(id: "transcript", value: url)
                 NSApp.activate(ignoringOtherApps: true)
             },
-            onOpenProtocolsFolder: openProtocolsFolder,
             onOpenSettings: {
                 bringWindowToFront(id: "settings")
             },
@@ -321,6 +320,7 @@ struct MeetingTranscriberApp: App {
                     openWindow(id: "transcript", value: url)
                     NSApp.activate(ignoringOtherApps: true)
                 },
+                onOpenProtocolsFolder: openProtocolsFolder,
                 onImportMedia: importAudioVideoFiles,
                 onTranscribe: { urls in appState.pipeline.enqueueFiles(urls) },
             )

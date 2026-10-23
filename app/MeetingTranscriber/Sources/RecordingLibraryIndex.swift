@@ -368,6 +368,90 @@ enum RecordingLibraryIndex {
         ).write(toDirectory: recordingsDirectory, basename: item.id)
     }
 
+    /// Permanently removes Sawti's saved files for one library entry. Only
+    /// direct children of this output root's `recordings` and `protocols`
+    /// folders are eligible, so importing a file never makes its original
+    /// source elsewhere on disk part of the deletion.
+    static func delete(item: RecordingLibraryItem, outputDirectory: URL) throws {
+        let openedScope = outputDirectory.startAccessingSecurityScopedResource()
+        defer { if openedScope { outputDirectory.stopAccessingSecurityScopedResource() } }
+
+        let fileManager = FileManager.default
+        let recordingsDirectory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
+        let protocolsDirectory = outputDirectory.appendingPathComponent("protocols", isDirectory: true)
+        var filesToDelete: [String: URL] = [:]
+
+        func include(_ file: URL, directlyIn directory: URL) {
+            guard file.standardizedFileURL.deletingLastPathComponent().path
+                == directory.standardizedFileURL.path,
+                fileManager.fileExists(atPath: file.path) else { return }
+            filesToDelete[file.standardizedFileURL.path] = file
+        }
+
+        for file in try files(in: recordingsDirectory, fileManager: fileManager) {
+            let name = file.lastPathComponent
+            let belongsToRecording = audioFile(file)?.0 == item.id
+                || name == "\(item.id)\(RecordingLibraryMetadata.filenameSuffix)"
+                || name == "\(item.id)\(RecordingBookmarksStore.filenameSuffix)"
+                || name == "\(item.id)\(RecordingSidecar.filenameSuffix)"
+                || name == "\(item.id)\(RecordingFileSuffix.inProgress)"
+                || RecordingFileSuffix.stripAppRaw(from: name) == item.id
+                || name == "\(item.id)\(SpeakerNamingStore.namingJSONSuffix)"
+                || name == "\(item.id)\(SpeakerNamingStore.segmentsSuffix)"
+            if belongsToRecording { include(file, directlyIn: recordingsDirectory) }
+        }
+
+        // A record-only sidecar is the source of truth for paired tracks,
+        // including legacy names that don't follow today's suffix convention.
+        if let sidecar = RecordingSidecar.read(fromDirectory: recordingsDirectory, basename: item.id) {
+            for filename in [sidecar.files.mix, sidecar.files.app, sidecar.files.mic].compactMap(\.self) {
+                include(recordingsDirectory.appendingPathComponent(filename), directlyIn: recordingsDirectory)
+            }
+        }
+
+        let transcriptFiles = try files(in: protocolsDirectory, fileManager: fileManager)
+        for file in transcriptFiles {
+            let stem = file.deletingPathExtension().lastPathComponent
+            let ext = file.pathExtension.lowercased()
+            let isTranscript = ext == "txt" && (stem == item.id || isOriginalTranscript(stem, for: item.id))
+            let isProtocol = ext == "md" && stem == item.id
+            if isTranscript || isProtocol {
+                include(file, directlyIn: protocolsDirectory)
+                include(
+                    file.deletingPathExtension().appendingPathExtension("editor.json"),
+                    directlyIn: protocolsDirectory,
+                )
+            }
+        }
+
+        // Include the exact paths held by this Library row as well, but keep
+        // them constrained to the Sawti-owned output subfolders.
+        for file in [item.transcriptURL, item.originalTranscriptURL, item.protocolURL].compactMap(\.self) {
+            include(file, directlyIn: protocolsDirectory)
+            if ["txt", "md"].contains(file.pathExtension.lowercased()) {
+                include(
+                    file.deletingPathExtension().appendingPathExtension("editor.json"),
+                    directlyIn: protocolsDirectory,
+                )
+            }
+        }
+        if let audioURL = item.audioURL { include(audioURL, directlyIn: recordingsDirectory) }
+
+        var failures = 0
+        for file in filesToDelete.values {
+            do {
+                try fileManager.removeItem(at: file)
+            } catch CocoaError.fileNoSuchFile {
+                continue
+            } catch {
+                failures += 1
+            }
+        }
+        if failures > 0 {
+            throw RecordingLibraryDeletionError(failedFileCount: failures)
+        }
+    }
+
     private static func files(in directory: URL, fileManager: FileManager) throws -> [URL] {
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -396,6 +480,14 @@ enum RecordingLibraryIndex {
         return nil
     }
 
+    private static func isOriginalTranscript(_ stem: String, for basename: String) -> Bool {
+        let prefix = "\(basename)_original"
+        guard stem.hasPrefix(prefix) else { return false }
+        let suffix = stem.dropFirst(prefix.count)
+        guard !suffix.isEmpty else { return true }
+        return suffix.first == "-" && Int(suffix.dropFirst()).map { $0 >= 2 } == true
+    }
+
     private static func dateFromFilename(_ id: String) -> Date? {
         let patterns = [#"^(\d{8}_\d{6})_"#, #"^(\d{8}_\d{4})_"#]
         for pattern in patterns {
@@ -417,5 +509,13 @@ enum RecordingLibraryIndex {
         }
         title = title.replacingOccurrences(of: #"_[0-9a-fA-F]{8}$"#, with: "", options: .regularExpression)
         return title.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+struct RecordingLibraryDeletionError: LocalizedError {
+    let failedFileCount: Int
+
+    var errorDescription: String? {
+        "Sawti could not remove \(failedFileCount) saved file(s). Some files may still be present."
     }
 }

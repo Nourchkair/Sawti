@@ -8,6 +8,7 @@ struct RecordingLibraryWindow: View {
     let outputDirectory: URL
     let jobs: [PipelineJob]
     let onOpenTranscript: (URL) -> Void
+    let onOpenProtocolsFolder: () -> Void
     let onImportMedia: () -> Void
     let onTranscribe: ([URL]) -> Void
 
@@ -20,10 +21,15 @@ struct RecordingLibraryWindow: View {
     @State private var loadError: String?
     @State private var activeReloadID: UUID?
     @State private var transcriptSearchIndex: [String: String] = [:]
+    @State private var itemPendingDelete: RecordingLibraryItem?
+    @State private var isShowingDeleteConfirmation = false
+    @State private var deletedEntryIDs: Set<String> = []
 
     private var entries: [RecordingLibraryItem] {
         var combined = recordings
         for job in jobs {
+            let jobEntryID = job.namingSlug ?? "job-\(job.id.uuidString)"
+            guard !deletedEntryIDs.contains(jobEntryID) else { continue }
             if let index = combined.firstIndex(where: { $0.id == job.namingSlug }) {
                 combined[index] = combined[index].reflecting(job)
             } else {
@@ -93,6 +99,11 @@ struct RecordingLibraryWindow: View {
                         }
                     }
                     ToolbarItem(placement: .primaryAction) {
+                        Button("Open Protocols Folder", systemImage: "folder") {
+                            onOpenProtocolsFolder()
+                        }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
                         Button("Refresh", systemImage: "arrow.clockwise") {
                             Task { await reload() }
                         }
@@ -108,6 +119,10 @@ struct RecordingLibraryWindow: View {
                     onTranscribe: onTranscribe,
                     isTranscribing: isTranscribing(selectedEntry),
                     onCategoryChanged: { category in updateCategory(for: selectedEntry, to: category) },
+                    onRequestDelete: {
+                        itemPendingDelete = selectedEntry
+                        isShowingDeleteConfirmation = true
+                    },
                 )
                 .id(selectedEntry.id)
             } else if isLoading {
@@ -128,6 +143,22 @@ struct RecordingLibraryWindow: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .task(id: reloadKey) { await reload() }
+        .confirmationDialog(
+            "Delete recording and related files?",
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible,
+        ) {
+            Button("Delete Recording", role: .destructive) {
+                guard let item = itemPendingDelete else { return }
+                delete(item)
+                itemPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { itemPendingDelete = nil }
+        } message: {
+            if let itemPendingDelete {
+                Text("This permanently deletes Sawti’s saved audio, transcripts, meeting notes, transcript edits and highlights, bookmarks, and Library metadata for “\(itemPendingDelete.title)”. The original file you imported from elsewhere is left untouched.")
+            }
+        }
         .onChange(of: searchText) { _, _ in
             if !filteredEntries.contains(where: { $0.id == selectedID }) {
                 selectedID = filteredEntries.first?.id
@@ -254,6 +285,24 @@ struct RecordingLibraryWindow: View {
             loadError = "Sawti could not save this category. Check access to the output folder."
         }
     }
+
+    private func delete(_ item: RecordingLibraryItem) {
+        let directory = outputDirectory
+        Task {
+            do {
+                try await Task.detached(priority: .utility) {
+                    try RecordingLibraryIndex.delete(item: item, outputDirectory: directory)
+                }.value
+                deletedEntryIDs.insert(item.id)
+                if selectedID == item.id { selectedID = nil }
+                loadError = nil
+                await reload()
+            } catch {
+                loadError = error.localizedDescription
+                await reload()
+            }
+        }
+    }
 }
 
 private enum RecordingCategoryFilter: Hashable {
@@ -333,6 +382,7 @@ private struct RecordingLibraryDetail: View {
     let onTranscribe: ([URL]) -> Void
     let isTranscribing: Bool
     let onCategoryChanged: (String) -> Void
+    let onRequestDelete: () -> Void
 
     @StateObject private var playback = RecordingAudioPlayback()
     @State private var transcriptText: String?
@@ -342,6 +392,10 @@ private struct RecordingLibraryDetail: View {
     private var transcriptionButtonTitle: String {
         if isTranscribing { return "Processing…" }
         return item.transcriptURL == nil ? "Transcribe" : "Transcribe Again"
+    }
+
+    private var canDelete: Bool {
+        !isTranscribing && !item.id.hasPrefix("job-")
     }
 
     var body: some View {
@@ -433,6 +487,11 @@ private struct RecordingLibraryDetail: View {
                         onOpenTranscript(originalURL)
                     }
                 }
+                Button(role: .destructive, action: onRequestDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(!canDelete)
+                .help(canDelete ? "Delete this recording and its Sawti files" : "Wait for processing to finish before deleting")
             }
             .buttonStyle(.bordered)
 
