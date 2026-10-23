@@ -10,7 +10,7 @@
         let claudeBin: String
         let language: String
 
-        /// User-supplied key from Settings → Protocol Generation (`AppSettings.claudeAPIKey`),
+        /// User-supplied key from Settings → Files & Notes → Meeting Notes (`AppSettings.claudeAPIKey`),
         /// injected only when the user has explicitly typed one in. Not
         /// auto-discovered: an implicit switch away from the CLI's own OAuth
         /// login would silently move a healthy subscription session onto

@@ -10,6 +10,18 @@ extension AppSettings {
         whisperLanguage.isEmpty ? nil : whisperLanguage
     }
 
+    /// Ordered allowlist with the primary language first, or nil when the
+    /// legacy auto-detect/single-language control is in use.
+    var whisperLanguageAllowlist: [String]? {
+        guard whisperLanguageAllowlistEnabled else { return nil }
+        let primary = whisperPrimaryLanguage.isEmpty ? "en" : whisperPrimaryLanguage
+        var languages = [primary]
+        for language in whisperAdditionalLanguages where !language.isEmpty && !languages.contains(language) {
+            languages.append(language)
+        }
+        return languages
+    }
+
     /// Parakeet language hint as an optional value. Empty string means the
     /// engine should auto-detect the language.
     var parakeetLanguageOrNil: String? {

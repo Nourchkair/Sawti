@@ -104,13 +104,22 @@ struct EngineComparisonView: View {
 
         do {
             let audioDuration = try AVAudioPlayer(contentsOf: audioURL).duration
+            let allowlist = settings.whisperLanguageAllowlist
+            let whisperLanguageLabel = if let allowlist {
+                allowlist.map { code in
+                    PickerLanguages.whisperKit.first { $0.code == code }?.label ?? code
+                }.joined(separator: ", ")
+            } else {
+                settings.whisperLanguage.isEmpty ? "auto" : settings.whisperLanguage
+            }
             let result = try await compare(
-                name: "WhisperKit · \(settings.whisperKitModel) · \(settings.whisperLanguage.isEmpty ? "auto" : settings.whisperLanguage)",
+                name: "WhisperKit · \(settings.whisperKitModel) · \(whisperLanguageLabel)",
                 engine: whisperKitEngine,
                 wasWarm: whisperWasWarm,
                 audioURL: audioURL,
                 audioDuration: audioDuration,
                 language: settings.whisperLanguage.isEmpty ? nil : settings.whisperLanguage,
+                languageAllowlist: allowlist,
             )
             results.append(result)
             whisperKitEngine.unloadModel()
@@ -122,6 +131,7 @@ struct EngineComparisonView: View {
                 audioURL: audioURL,
                 audioDuration: audioDuration,
                 language: settings.parakeetLanguage.isEmpty ? nil : settings.parakeetLanguage,
+                languageAllowlist: nil,
             )
             results.append(parakeet)
             message = "Load time is an unload/reload in this Sawti process; first-use downloads and clean-launch startup are not isolated. Run the same audio/reference several times on the M2/8 GB and compare WER, CER, and RTF."
@@ -146,10 +156,12 @@ struct EngineComparisonView: View {
         audioURL: URL,
         audioDuration: TimeInterval,
         language: String?,
+        languageAllowlist: [String]?,
     ) async throws -> EngineComparisonResult {
         if let whisper = engine as? WhisperKitEngine {
             whisper.applyModelVariant(settings.whisperKitModel)
-            whisper.language = language
+            whisper.languageAllowlist = languageAllowlist
+            whisper.language = languageAllowlist.map { $0.count == 1 ? $0[0] : nil } ?? language
             whisper.customVocabularyPath = settings.customVocabularyPath
             whisper.customVocabularyBookmark = settings.customVocabularyBookmark
             whisper.vocabularyPromptEnabled = settings.whisperKitVocabularyPromptEnabled

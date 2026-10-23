@@ -52,9 +52,9 @@ struct OutputSettingsView: View {
         Form {
             // Output folder applies to record-only AND protocol mode, so this
             // section deliberately sits outside the .recordOnlyDisabled block.
-            Section("Output Folder") {
+            Section("Save Location") {
                 HStack {
-                    Text("Output Folder")
+                    Text("Save Location")
                     Spacer()
                     Text(outputDirDisplay)
                         .foregroundStyle(.secondary)
@@ -77,13 +77,13 @@ struct OutputSettingsView: View {
             }
             .accessibilityIdentifier(A11yID.outputFolderSection)
 
-            Section("Protocol Generation") {
-                Toggle("Include full transcript in protocol", isOn: $settings.includeFullTranscriptInProtocol)
+            Section("Meeting Notes") {
+                Toggle("Include full transcript in notes", isOn: $settings.includeFullTranscriptInProtocol)
                     .accessibilityIdentifier(A11yID.includeFullTranscriptToggle)
-                    Toggle("Keep original transcript separately", isOn: $settings.saveRawTranscriptSeparately)
+                    Toggle("Save original transcript separately", isOn: $settings.saveRawTranscriptSeparately)
                     .accessibilityIdentifier(A11yID.saveRawTranscriptToggle)
 
-                Picker("LLM Provider", selection: $settings.protocolProvider) {
+                Picker("AI service", selection: $settings.protocolProvider) {
                     ForEach(ProtocolProvider.allCases, id: \.self) { provider in
                         Text(provider.label).tag(provider)
                     }
@@ -91,7 +91,7 @@ struct OutputSettingsView: View {
 
                 providerConfigView
 
-                Picker("Protocol Language", selection: $settings.protocolLanguage) {
+                Picker("Notes language", selection: $settings.protocolLanguage) {
                     ForEach(AppSettings.protocolLanguages, id: \.self) { lang in
                         Text(lang).tag(lang)
                     }
@@ -349,7 +349,7 @@ struct OutputSettingsView: View {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a folder for protocol output"
+        panel.message = "Choose where Sawti saves recordings and transcripts"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         settings.setCustomOutputDir(url)
     }

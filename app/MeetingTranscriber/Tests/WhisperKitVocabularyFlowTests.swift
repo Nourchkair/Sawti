@@ -197,6 +197,10 @@ private final class CapturingWhisperDecodingClient: WhisperDecodingClient {
         samplePrompts.append(PromptObservation(decodeOptions.promptTokens))
         return []
     }
+
+    func detectLanguage(audioArray _: [Float]) async throws -> (language: String, langProbs: [String: Float]) {
+        ("en", ["en": 0])
+    }
 }
 
 private enum PromptObservation: Equatable {

@@ -11,11 +11,11 @@ struct SettingsView: View {
     /// General tab so it can warn when browser-meeting consent cannot reach the
     /// user. Nil until the first permission check completes.
     var notificationVisibility: NotificationVisibility?
-    /// Required: the same actor instance the pipeline writes to, so the Stats
-    /// tab and the pipeline don't race two writers on `recognition_log.jsonl`.
+    /// Required: the same actor instance the pipeline writes to, so the
+    /// Speakers tab and pipeline share `recognition_log.jsonl`.
     var recognitionStatsLog: RecognitionStatsLog
-    /// Same actor instance the pipeline writes to, so the Processing Stats tab
-    /// and the pipeline don't race two writers on `stage_timing.jsonl`.
+    /// Same actor instance the pipeline writes to, so Advanced and the pipeline
+    /// share `stage_timing.jsonl`.
     var stageTimingLog: StageTimingLog
     /// Factory for the voice-enrollment diarizer. nil → enroll button hidden.
     var enrollmentDiarizerFactory: (() -> any DiarizationProvider)?
@@ -131,7 +131,6 @@ struct SettingsView: View {
             SpeakersSettingsView(
                 settings: settings,
                 recognitionStatsLog: recognitionStatsLog,
-                stageTimingLog: stageTimingLog,
                 enrollmentDiarizerFactory: enrollmentDiarizerFactory,
                 namingDialogActive: namingDialogActive,
                 pipelineBusy: pipelineBusy,
@@ -142,7 +141,7 @@ struct SettingsView: View {
             OutputSettingsView(settings: settings)
 
         case .advanced:
-            AdvancedSettingsView(settings: settings)
+            AdvancedSettingsView(settings: settings, stageTimingLog: stageTimingLog)
 
         case .about:
             AboutSettingsView(settings: settings, updateChecker: updateChecker)
@@ -163,7 +162,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .audio: "Audio"
         case .transcription: "Transcription"
         case .speakers: "Speakers"
-        case .output: "Output"
+        case .output: "Files & Notes"
         case .advanced: "Advanced"
         case .about: "About"
         }
@@ -175,7 +174,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .audio: "mic"
         case .transcription: "waveform"
         case .speakers: "person.2"
-        case .output: "doc.text"
+        case .output: "folder"
         case .advanced: "wrench.and.screwdriver"
         case .about: "info.circle"
         }

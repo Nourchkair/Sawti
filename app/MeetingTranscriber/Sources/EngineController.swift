@@ -95,7 +95,14 @@ final class EngineController {
         switch settings.transcriptionEngine {
         case .whisperKit:
             whisperKit.applyModelVariant(settings.whisperKitModel)
-            let next = settings.whisperLanguageOrNil
+            let allowlist = settings.whisperLanguageAllowlist
+            whisperKit.languageAllowlist = allowlist
+            let next: String?
+            if let allowlist {
+                next = allowlist.count == 1 ? allowlist[0] : nil
+            } else {
+                next = settings.whisperLanguageOrNil
+            }
             if whisperKit.language != next { whisperKit.language = next }
             let nextVocab = settings.customVocabularyPath
             if whisperKit.customVocabularyPath != nextVocab { whisperKit.customVocabularyPath = nextVocab }
@@ -124,6 +131,9 @@ final class EngineController {
             _ = settings.transcriptionEngine
             _ = settings.whisperKitModel
             _ = settings.whisperLanguage
+            _ = settings.whisperLanguageAllowlistEnabled
+            _ = settings.whisperPrimaryLanguage
+            _ = settings.whisperAdditionalLanguages
             _ = settings.customVocabularyPath
             _ = settings.customVocabularyBookmark
             _ = settings.whisperKitVocabularyPromptEnabled

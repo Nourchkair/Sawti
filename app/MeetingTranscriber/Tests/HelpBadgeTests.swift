@@ -202,7 +202,6 @@ final class HelpBadgeTests: XCTestCase {
             ("Speakers", SpeakersSettingsView(
                 settings: settings,
                 recognitionStatsLog: RecognitionStatsLog(),
-                stageTimingLog: StageTimingLog(),
                 enrollmentDiarizerFactory: nil,
                 namingDialogActive: false,
                 pipelineBusy: false,

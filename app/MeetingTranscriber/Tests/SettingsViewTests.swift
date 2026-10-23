@@ -73,7 +73,6 @@ final class SettingsViewTests: XCTestCase { // swiftlint:disable:this type_body_
         SpeakersSettingsView(
             settings: settings ?? makeSettings(),
             recognitionStatsLog: RecognitionStatsLog(),
-            stageTimingLog: StageTimingLog(),
             enrollmentDiarizerFactory: nil,
             namingDialogActive: false,
             pipelineBusy: false,
@@ -86,7 +85,7 @@ final class SettingsViewTests: XCTestCase { // swiftlint:disable:this type_body_
     }
 
     private func makeAdvanced(settings: AppSettings? = nil) -> AdvancedSettingsView {
-        AdvancedSettingsView(settings: settings ?? makeSettings())
+        AdvancedSettingsView(settings: settings ?? makeSettings(), stageTimingLog: StageTimingLog())
     }
 
     // MARK: - Top-level SettingsView
@@ -380,7 +379,7 @@ final class SettingsViewTests: XCTestCase { // swiftlint:disable:this type_body_
 
     func testProviderPickerExists() throws {
         let body = try makeOutput().inspect()
-        XCTAssertNoThrow(try body.find(text: "LLM Provider"))
+        XCTAssertNoThrow(try body.find(text: "AI service"))
     }
 
     #if !APPSTORE
@@ -426,12 +425,12 @@ final class SettingsViewTests: XCTestCase { // swiftlint:disable:this type_body_
 
     func testProtocolLanguagePickerExists() throws {
         let body = try makeOutput().inspect()
-        XCTAssertNoThrow(try body.find(text: "Protocol Language"))
+        XCTAssertNoThrow(try body.find(text: "Notes language"))
     }
 
     func testOutputFolderSectionExists() throws {
         let body = try makeOutput().inspect()
-        XCTAssertNoThrow(try body.find(text: "Output Folder"))
+        XCTAssertNoThrow(try body.find(text: "Save Location"))
     }
 
     func testResetButtonDisabledWhenNoCustomDir() throws {
@@ -487,7 +486,7 @@ final class SettingsViewTests: XCTestCase { // swiftlint:disable:this type_body_
         func testDebugRPCToggleBindsToSetting() throws {
             let settings = makeSettings()
             settings.debugRPCEnabled = false
-            let view = AdvancedSettingsView(settings: settings)
+            let view = AdvancedSettingsView(settings: settings, stageTimingLog: StageTimingLog())
             let toggle = try view.inspect().find(ViewType.Toggle.self) { toggle in
                 try toggle.labelView().text().string() == "Local Automation API"
             }
@@ -534,8 +533,8 @@ final class SettingsViewTests: XCTestCase { // swiftlint:disable:this type_body_
     }
 
     func testRecordOnlyDoesNotDisableOutputFolderSection() throws {
-        // Output Folder is where WAVs land in record-only mode too,
-        // so it must remain interactive when the rest of Output is dimmed.
+        // Save Location is where WAVs land in record-only mode too,
+        // so it must remain interactive when Meeting Notes is dimmed.
         let settings = makeSettings()
         settings.recordOnly = true
         let body = try makeOutput(settings: settings).inspect()

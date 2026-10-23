@@ -288,6 +288,23 @@ final class AppSettings {
         didSet { defaults.set(whisperLanguage, forKey: "whisperLanguage") }
     }
 
+    /// When enabled, WhisperKit's per-window language choice is restricted to
+    /// the selected primary/additional language set. Disabled preserves the
+    /// existing auto-detect or single-language behavior.
+    var whisperLanguageAllowlistEnabled: Bool {
+        didSet { defaults.set(whisperLanguageAllowlistEnabled, forKey: "whisperLanguageAllowlistEnabled") }
+    }
+
+    /// The primary language used when language detection is uncertain.
+    var whisperPrimaryLanguage: String {
+        didSet { defaults.set(whisperPrimaryLanguage, forKey: "whisperPrimaryLanguage") }
+    }
+
+    /// Other languages WhisperKit is allowed to select for an audio window.
+    var whisperAdditionalLanguages: [String] {
+        didSet { defaults.set(whisperAdditionalLanguages, forKey: "whisperAdditionalLanguages") }
+    }
+
     /// Parakeet language hint (ISO 639-1 code). Empty string = auto-detect.
     /// FluidAudio's v3 TDT decoder uses this for script-aware token filtering;
     /// auto-detect can drift Cyrillic ↔ Latin on multi-script audio.
@@ -501,7 +518,7 @@ final class AppSettings {
 
     #if !APPSTORE
         /// API key for the Claude CLI protocol generator, entered by the user
-        /// in Settings → Protocol Generation. Empty means use the CLI's own
+        /// in Settings → Files & Notes → Meeting Notes. Empty means use the CLI's own
         /// `claude login` session; this is never populated automatically.
         var claudeAPIKey: String {
             get { KeychainHelper.read(key: claudeAPIKeyAccount) ?? "" }
@@ -605,7 +622,12 @@ final class AppSettings {
             ?? "openai_whisper-large-v3-v20240930_turbo"
         // Auto-detect is a safer default for Sawti's multilingual use than the
         // upstream German-only default. A user can still pin a language.
-        whisperLanguage = defaults.object(forKey: "whisperLanguage") as? String ?? ""
+        let savedWhisperLanguage = defaults.string(forKey: "whisperLanguage") ?? ""
+        whisperLanguage = savedWhisperLanguage
+        whisperLanguageAllowlistEnabled = defaults.object(forKey: "whisperLanguageAllowlistEnabled") as? Bool ?? false
+        whisperPrimaryLanguage = defaults.string(forKey: "whisperPrimaryLanguage")
+            ?? (savedWhisperLanguage.isEmpty ? "en" : savedWhisperLanguage)
+        whisperAdditionalLanguages = defaults.stringArray(forKey: "whisperAdditionalLanguages") ?? ["fr", "ar"]
         parakeetLanguage = defaults.object(forKey: "parakeetLanguage") as? String ?? ""
         customVocabularyPath = defaults.string(forKey: "customVocabularyPath") ?? ""
         customVocabularyBookmark = defaults.data(forKey: "customVocabularyBookmark")

@@ -7,6 +7,13 @@ import WhisperKit
 
 private let logger = Logger(subsystem: AppPaths.logSubsystem, category: "WhisperKitEngine")
 
+private struct WhisperLanguageWindow {
+    let startSample: Int
+    let endSample: Int
+    let coreStartSample: Int
+    let coreEndSample: Int
+}
+
 @MainActor
 @Observable
 final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
@@ -30,6 +37,9 @@ final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
     }
 
     var language: String?
+    /// Ordered selected-language set. The first value is the primary fallback;
+    /// nil keeps the existing one-language/automatic behavior.
+    var languageAllowlist: [String]?
     /// Path to the shared one-term-per-line vocabulary file. Whisper uses the
     /// terms as a soft decoder hint; unlike Parakeet CTC rescoring, it cannot
     /// guarantee a replacement in the resulting transcript.
@@ -330,13 +340,21 @@ final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
 
         transcriptionProgress = 0
 
+        if let languages = normalizedLanguageAllowlist, languages.count > 1 {
+            return try await transcribeSegments(
+                audioPath: audioPath,
+                languages: languages,
+                client: decodingClient,
+            )
+        }
+
         // Estimate total 30s windows from audio duration
         let totalWindows = max(1, Self.estimateWindowCount(audioPath: audioPath))
 
         // Snapshot all settings-derived decoding options before the asynchronous
         // decode starts. A later settings change only affects a subsequent run.
         let options = Self.decodingOptions(
-            language: language,
+            language: normalizedLanguageAllowlist?.first ?? self.language,
             promptTokens: vocabularyPromptTokens(for: decodingClient),
         )
 
@@ -384,6 +402,15 @@ final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
     func transcribeSamples(_ samples: [Float]) async throws -> String {
         try await ensureModel()
         guard let decodingClient else { throw TranscriptionError.modelNotLoaded }
+        let language = if let languages = normalizedLanguageAllowlist {
+            if languages.count > 1 {
+                await selectedLanguage(for: samples, languages: languages, client: decodingClient)
+            } else {
+                languages.first
+            }
+        } else {
+            self.language
+        }
         // The explicit experimental prompt choice applies to both saved and
         // live WhisperKit transcription while retaining an immutable snapshot.
         let options = Self.decodingOptions(
@@ -404,6 +431,137 @@ final class WhisperKitEngine: TranscribingEngine, StreamingTranscribingEngine {
             pieces.append(text)
         }
         return pieces.joined(separator: " ")
+    }
+
+    /// Decode short overlapping windows separately so WhisperKit can select a
+    /// language for each window, constrained to the user's selected set. A
+    /// primary-language bias keeps weak or ambiguous detections in the user's
+    /// main language.
+    private func transcribeSegments(
+        audioPath: URL,
+        languages: [String],
+        client: any WhisperDecodingClient,
+    ) async throws -> [TimestampedSegment] {
+        let samples = try await Self.loadWhisperSamples(audioPath: audioPath)
+        guard !samples.isEmpty else { return [] }
+
+        let windows = Self.languageWindows(sampleCount: samples.count)
+        let promptTokens = vocabularyPromptTokens(for: client)
+        let sampleRate = AudioConstants.targetSampleRate
+        var output: [TimestampedSegment] = []
+        var lastText = ""
+
+        for (index, window) in windows.enumerated() {
+            let windowSamples = Array(samples[window.startSample ..< window.endSample])
+            let selected = await selectedLanguage(for: windowSamples, languages: languages, client: client)
+            let options = Self.decodingOptions(language: selected, promptTokens: promptTokens)
+            let results = try await client.transcribeSamples(windowSamples, decodeOptions: options)
+
+            let offset = TimeInterval(window.startSample) / TimeInterval(sampleRate)
+            let coreStart = TimeInterval(window.coreStartSample) / TimeInterval(sampleRate)
+            let coreEnd = TimeInterval(window.coreEndSample) / TimeInterval(sampleRate)
+            for segment in results.flatMap(\.segments) {
+                let text = Self.stripWhisperTokens(segment.text).trimmingCharacters(in: .whitespaces)
+                let start = offset + TimeInterval(segment.start)
+                let end = offset + TimeInterval(segment.end)
+                let midpoint = (start + end) / 2
+                guard !text.isEmpty, midpoint >= coreStart, midpoint < coreEnd, text != lastText else { continue }
+                lastText = text
+                output.append(TimestampedSegment(start: start, end: end, text: text))
+            }
+
+            transcriptionProgress = Double(index + 1) / Double(windows.count)
+        }
+
+        transcriptionProgress = 1
+        return output.sorted { $0.start < $1.start }
+    }
+
+    private func selectedLanguage(
+        for samples: [Float],
+        languages: [String],
+        client: any WhisperDecodingClient,
+    ) async -> String {
+        guard let primary = languages.first else { return "en" }
+        do {
+            let detection = try await client.detectLanguage(audioArray: samples)
+            let primaryScore = detection.langProbs[primary] ?? -.infinity
+            var bestLanguage = primary
+            var bestScore = primaryScore
+
+            for language in languages.dropFirst() {
+                let score = detection.langProbs[language] ?? -.infinity
+                if score > bestScore {
+                    bestLanguage = language
+                    bestScore = score
+                }
+            }
+
+            // WhisperKit reports language log-probabilities. A 0.75 margin
+            // means a secondary language needs clear evidence before it
+            // replaces the primary language for this audio window.
+            guard bestLanguage == primary || bestScore - primaryScore >= 0.75 else {
+                return primary
+            }
+            return bestLanguage
+        } catch {
+            logger.warning("WhisperKit language detection failed for a window; using primary language")
+            return primary
+        }
+    }
+
+    private var normalizedLanguageAllowlist: [String]? {
+        guard let languageAllowlist else { return nil }
+        var unique: [String] = []
+        for language in languageAllowlist where !language.isEmpty && !unique.contains(language) {
+            unique.append(language)
+        }
+        return unique.isEmpty ? nil : unique
+    }
+
+    private static func loadWhisperSamples(audioPath: URL) async throws -> [Float] {
+        try await Task.detached(priority: .userInitiated) {
+            let loaded = try await AudioMixer.loadAudioAsFloat32(url: audioPath)
+            return AudioMixer.resample(
+                loaded.samples,
+                from: loaded.sampleRate,
+                to: AudioConstants.targetSampleRate,
+            )
+        }.value
+    }
+
+    private static func languageWindows(sampleCount: Int) -> [WhisperLanguageWindow] {
+        let sampleRate = AudioConstants.targetSampleRate
+        let windowSize = 20 * sampleRate
+        let overlap = 2 * sampleRate
+        let stride = windowSize - overlap
+        let minimumTail = 4 * sampleRate
+        let maximumWindow = 30 * sampleRate
+        var ranges: [(start: Int, end: Int)] = []
+        var start = 0
+
+        while start < sampleCount {
+            var end = min(start + windowSize, sampleCount)
+            let remaining = sampleCount - end
+            if remaining > 0, remaining < minimumTail, end - start + remaining <= maximumWindow {
+                end = sampleCount
+            }
+            ranges.append((start, end))
+            if end == sampleCount { break }
+            start += stride
+        }
+
+        return ranges.indices.map { index in
+            let range = ranges[index]
+            let coreStart = index == 0 ? range.start : (ranges[index - 1].end + range.start) / 2
+            let coreEnd = index == ranges.count - 1 ? range.end : (range.end + ranges[index + 1].start) / 2
+            return WhisperLanguageWindow(
+                startSample: range.start,
+                endSample: range.end,
+                coreStartSample: coreStart,
+                coreEndSample: coreEnd,
+            )
+        }
     }
 
     // Build the WhisperKit `DecodingOptions` for a transcription run.

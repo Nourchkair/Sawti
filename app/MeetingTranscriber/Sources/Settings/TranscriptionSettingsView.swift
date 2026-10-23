@@ -72,11 +72,70 @@ struct TranscriptionSettingsView: View {
                 }
             }
 
-            Picker("Language", selection: $settings.whisperLanguage) {
-                ForEach(PickerLanguages.whisperKit, id: \.code) { lang in
-                    Text(lang.label).tag(lang.code)
+            Toggle("Limit detection to selected languages", isOn: Binding(
+                get: { settings.whisperLanguageAllowlistEnabled },
+                set: { enabled in
+                    if enabled, settings.whisperPrimaryLanguage.isEmpty {
+                        settings.whisperPrimaryLanguage = "en"
+                    }
+                    settings.whisperLanguageAllowlistEnabled = enabled
+                },
+            ))
+
+            if settings.whisperLanguageAllowlistEnabled {
+                whisperPrimaryLanguagePicker
+                whisperAdditionalLanguagesPicker
+                Text("Whisper checks languages in about 20-second windows and prefers the primary language when scores are close. Short language switches inside one window or noisy speech can still be misrecognized.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Picker("Language", selection: $settings.whisperLanguage) {
+                    ForEach(PickerLanguages.whisperKit, id: \.code) { lang in
+                        Text(lang.label).tag(lang.code)
+                    }
                 }
             }
+        }
+    }
+
+    private var whisperPrimaryLanguagePicker: some View {
+        Picker("Primary language", selection: $settings.whisperPrimaryLanguage) {
+            ForEach(PickerLanguages.whisperKit.filter { !$0.code.isEmpty }, id: \.code) { language in
+                Text(language.label).tag(language.code)
+            }
+        }
+    }
+
+    private var whisperAdditionalLanguagesPicker: some View {
+        let options = PickerLanguages.whisperKit.filter {
+            !$0.code.isEmpty && $0.code != settings.whisperPrimaryLanguage
+        }
+        let selectedLabels = options
+            .filter { settings.whisperAdditionalLanguages.contains($0.code) }
+            .map(\.label)
+        return HStack {
+            Text("Also detect")
+            Spacer()
+            Menu {
+                ForEach(options, id: \.code) { language in
+                    Toggle(language.label, isOn: Binding(
+                        get: { settings.whisperAdditionalLanguages.contains(language.code) },
+                        set: { isSelected in
+                            var selected = settings.whisperAdditionalLanguages
+                            if isSelected, !selected.contains(language.code) {
+                                selected.append(language.code)
+                            } else if !isSelected {
+                                selected.removeAll { $0 == language.code }
+                            }
+                            settings.whisperAdditionalLanguages = selected
+                        },
+                    ))
+                }
+            } label: {
+                Text(selectedLabels.isEmpty ? "None" : selectedLabels.joined(separator: ", "))
+            }
+            .accessibilityIdentifier("whisperAdditionalLanguages")
         }
     }
 
@@ -87,6 +146,12 @@ struct TranscriptionSettingsView: View {
                 ForEach(PickerLanguages.parakeet, id: \.code) { lang in
                     Text(lang.label).tag(lang.code)
                 }
+            }
+            if settings.whisperLanguageAllowlistEnabled {
+                Text("Selected-language detection uses WhisperKit. Parakeet accepts one language hint and does not currently support Arabic.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -187,6 +252,7 @@ struct TranscriptionSettingsView: View {
 
             captionOverlayToggle
             captionSizePicker
+            captionSizePreview
 
             Text(captionBackendFootnote)
                 .font(.caption)
@@ -225,6 +291,26 @@ struct TranscriptionSettingsView: View {
         .pickerStyle(.segmented)
         .disabled(!settings.liveTranscriptionEnabled || !settings.liveCaptionsOverlayEnabled)
         .accessibilityIdentifier(A11yID.liveCaptionsSizePicker)
+    }
+
+    /// Uses the same point size as the live overlay so the setting is visible
+    /// before the next recording starts.
+    private var captionSizePreview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Preview")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("Speaker: This is how a live caption will look.")
+                .font(.system(size: settings.liveCaptionsSize.fontSize, weight: .medium, design: .rounded))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .accessibilityIdentifier("liveCaptionSizePreview")
     }
 
     /// True when enabling captions would trigger the first-use Nemotron download:

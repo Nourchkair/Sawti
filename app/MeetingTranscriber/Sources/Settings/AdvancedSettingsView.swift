@@ -19,6 +19,7 @@ private enum PrivacyPane: String {
 
 struct AdvancedSettingsView: View {
     @Bindable var settings: AppSettings
+    var stageTimingLog: StageTimingLog
 
     @State private var micPermission: AVAuthorizationStatus = .notDetermined
     @State private var screenRecordingOK = false
@@ -124,6 +125,8 @@ struct AdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
                 #endif
             }
+
+            ProcessingStatsView(log: stageTimingLog)
         }
         .formStyle(.grouped)
         .onAppear { refreshPermissions() }
