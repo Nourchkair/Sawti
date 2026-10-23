@@ -322,7 +322,9 @@ struct MeetingTranscriberApp: App {
                 },
                 onOpenProtocolsFolder: openProtocolsFolder,
                 onImportMedia: importAudioVideoFiles,
-                onTranscribe: { urls in appState.pipeline.enqueueFiles(urls) },
+                onTranscribe: { recordingID, urls in
+                    appState.pipeline.enqueueFiles(urls, libraryRecordingID: recordingID)
+                },
             )
         }
         .defaultSize(width: 1120, height: 760)

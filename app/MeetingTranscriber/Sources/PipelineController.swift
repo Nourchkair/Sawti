@@ -408,7 +408,11 @@ final class PipelineController {
     }
 
     @discardableResult
-    func enqueueFiles(_ urls: [URL], autoSkipNaming: Bool = false) -> [UUID] {
+    func enqueueFiles(
+        _ urls: [URL],
+        autoSkipNaming: Bool = false,
+        libraryRecordingID: String? = nil,
+    ) -> [UUID] {
         ensureQueue()
 
         let resolution = PairedRecordingResolver.resolve(urls: urls)
@@ -419,11 +423,13 @@ final class PipelineController {
                 fromDirectory: group.directory,
                 basename: group.stem,
             )
+            let metadataID = libraryRecordingID ?? group.stem
             let libraryMetadata = RecordingLibraryMetadata.read(
                 fromDirectory: group.directory,
-                basename: group.stem,
+                basename: metadataID,
             )
-            let title = sidecar?.title ?? libraryMetadata?.title ?? group.stem
+            let stableRecordingID = libraryRecordingID ?? libraryMetadata.map { _ in metadataID }
+            let title = libraryMetadata?.customTitle ?? libraryMetadata?.title ?? sidecar?.title ?? group.stem
             let appName = sidecar?.appName ?? libraryMetadata?.appName ?? "File"
             let micDelay = sidecar?.micDelaySeconds ?? 0
             let participants = sidecar?.participants ?? libraryMetadata?.participants ?? []
@@ -449,6 +455,7 @@ final class PipelineController {
                 // real meeting-start time, not this reprocessing moment.
                 meetingStartTime: sidecar?.startedAt ?? libraryMetadata?.recordedAt,
                 autoSkipNaming: autoSkipNaming,
+                libraryRecordingID: stableRecordingID,
             )
             ids.append(job.id)
             queue.enqueue(job)
@@ -457,13 +464,14 @@ final class PipelineController {
         for url in resolution.singletons {
             let title = url.deletingPathExtension().lastPathComponent
             let stem = url.deletingPathExtension().lastPathComponent
-            let metadataStem = stem.hasSuffix("_16k") ? String(stem.dropLast(4)) : stem
+            let metadataStem = libraryRecordingID ?? (stem.hasSuffix("_16k") ? String(stem.dropLast(4)) : stem)
             let libraryMetadata = RecordingLibraryMetadata.read(
                 fromDirectory: url.deletingLastPathComponent(),
                 basename: metadataStem,
             )
+            let stableRecordingID = libraryRecordingID ?? libraryMetadata.map { _ in metadataStem }
             let job = PipelineJob(
-                meetingTitle: libraryMetadata?.title ?? title,
+                meetingTitle: libraryMetadata?.customTitle ?? libraryMetadata?.title ?? title,
                 appName: libraryMetadata?.appName ?? "File",
                 mixPath: url,
                 appPath: nil,
@@ -473,6 +481,7 @@ final class PipelineController {
                 recordingSource: libraryMetadata?.recordingSource ?? .imported,
                 meetingStartTime: libraryMetadata?.recordedAt,
                 autoSkipNaming: autoSkipNaming,
+                libraryRecordingID: stableRecordingID,
             )
             ids.append(job.id)
             queue.enqueue(job)

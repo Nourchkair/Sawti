@@ -58,11 +58,18 @@ struct RecordingLibraryMetadata: Codable, Sendable {
     let appName: String
     let recordedAt: Date
     let participants: [String]
+    /// Legacy free-text organizer, read to migrate older recordings into a
+    /// workspace catalog.
     let category: String?
+    let customTitle: String?
+    let workspaceID: UUID?
+    let editedAudio: [RecordingEditedAudio]?
+    let audioFilename: String?
     let recordingSource: RecordingSourceKind?
 
     private enum CodingKeys: String, CodingKey {
-        case version, title, appName, recordedAt, participants, category, course, recordingSource
+        case version, title, appName, recordedAt, participants, category, course
+        case customTitle, workspaceID, editedAudio, audioFilename, recordingSource
     }
 
     init(
@@ -71,6 +78,10 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         recordedAt: Date,
         participants: [String],
         category: String? = nil,
+        customTitle: String? = nil,
+        workspaceID: UUID? = nil,
+        editedAudio: [RecordingEditedAudio]? = nil,
+        audioFilename: String? = nil,
         recordingSource: RecordingSourceKind? = nil,
     ) {
         version = Self.currentVersion
@@ -79,6 +90,10 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         self.recordedAt = recordedAt
         self.participants = participants
         self.category = category
+        self.customTitle = customTitle
+        self.workspaceID = workspaceID
+        self.editedAudio = editedAudio
+        self.audioFilename = audioFilename
         self.recordingSource = recordingSource
     }
 
@@ -91,6 +106,10 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         participants = try container.decode([String].self, forKey: .participants)
         category = try container.decodeIfPresent(String.self, forKey: .category)
             ?? container.decodeIfPresent(String.self, forKey: .course)
+        customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
+        workspaceID = try container.decodeIfPresent(UUID.self, forKey: .workspaceID)
+        editedAudio = try container.decodeIfPresent([RecordingEditedAudio].self, forKey: .editedAudio)
+        audioFilename = try container.decodeIfPresent(String.self, forKey: .audioFilename)
         recordingSource = try container.decodeIfPresent(RecordingSourceKind.self, forKey: .recordingSource)
     }
 
@@ -102,6 +121,10 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         try container.encode(recordedAt, forKey: .recordedAt)
         try container.encode(participants, forKey: .participants)
         try container.encodeIfPresent(category, forKey: .category)
+        try container.encodeIfPresent(customTitle, forKey: .customTitle)
+        try container.encodeIfPresent(workspaceID, forKey: .workspaceID)
+        try container.encodeIfPresent(editedAudio, forKey: .editedAudio)
+        try container.encodeIfPresent(audioFilename, forKey: .audioFilename)
         try container.encodeIfPresent(recordingSource, forKey: .recordingSource)
     }
 
@@ -131,12 +154,15 @@ struct RecordingLibraryMetadata: Codable, Sendable {
 struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
+    let sourceTitle: String
     let recordedAt: Date
     let appName: String?
     let participants: [String]
-    let category: String?
+    let workspaceID: UUID?
+    let legacyCategory: String?
     let recordingSource: RecordingSourceKind
     let bookmarks: [RecordingBookmark]
+    let editedAudio: [RecordingEditedAudio]
     let transcriptURL: URL?
     let originalTranscriptURL: URL?
     let protocolURL: URL?
@@ -182,12 +208,15 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
         Self(
             id: id,
             title: title,
+            sourceTitle: sourceTitle,
             recordedAt: recordedAt,
             appName: appName,
             participants: participants,
-            category: category,
+            workspaceID: workspaceID,
+            legacyCategory: legacyCategory,
             recordingSource: recordingSource,
             bookmarks: bookmarks,
+            editedAudio: editedAudio,
             transcriptURL: job.transcriptPath ?? transcriptURL,
             originalTranscriptURL: originalTranscriptURL,
             protocolURL: job.protocolPath ?? protocolURL,
@@ -201,12 +230,15 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
         Self(
             id: job.namingSlug ?? "job-\(job.id.uuidString)",
             title: job.meetingTitle,
+            sourceTitle: job.meetingTitle,
             recordedAt: job.artifactStartTime,
             appName: job.appName,
             participants: job.participants,
-            category: nil,
+            workspaceID: nil,
+            legacyCategory: nil,
             recordingSource: job.recordingSource ?? .inferred(appName: job.appName),
             bookmarks: job.bookmarks ?? [],
+            editedAudio: [],
             transcriptURL: job.transcriptPath,
             originalTranscriptURL: job.rawTranscriptPath,
             protocolURL: job.protocolPath,
@@ -223,12 +255,15 @@ enum RecordingLibraryIndex {
     private struct Builder {
         let id: String
         var title: String
+        var customTitle: String?
         var recordedAt: Date
         var appName: String?
         var participants: [String] = []
-        var category: String?
+        var workspaceID: UUID?
+        var legacyCategory: String?
         var recordingSource: RecordingSourceKind = .imported
         var bookmarks: [RecordingBookmark] = []
+        var editedAudio: [RecordingEditedAudio] = []
         var transcriptURL: URL?
         var originalTranscriptURL: URL?
         var protocolURL: URL?
@@ -237,13 +272,16 @@ enum RecordingLibraryIndex {
         func item() -> RecordingLibraryItem {
             RecordingLibraryItem(
                 id: id,
-                title: title,
+                title: customTitle ?? title,
+                sourceTitle: title,
                 recordedAt: recordedAt,
                 appName: appName,
                 participants: participants,
-                category: category,
+                workspaceID: workspaceID,
+                legacyCategory: legacyCategory,
                 recordingSource: recordingSource,
                 bookmarks: bookmarks,
+                editedAudio: editedAudio,
                 transcriptURL: transcriptURL,
                 originalTranscriptURL: originalTranscriptURL,
                 protocolURL: protocolURL,
@@ -306,10 +344,16 @@ enum RecordingLibraryIndex {
                 else { continue }
                 var entry = builder(for: id, source: file)
                 entry.title = metadata.title
+                entry.customTitle = metadata.customTitle
                 entry.appName = metadata.appName
                 entry.recordedAt = metadata.recordedAt
                 entry.participants = metadata.participants
-                entry.category = metadata.category
+                entry.workspaceID = metadata.workspaceID
+                entry.legacyCategory = metadata.category
+                entry.editedAudio = metadata.editedAudio ?? []
+                if let filename = metadata.audioFilename {
+                    entry.audioURL = recordingsDirectory.appendingPathComponent(filename)
+                }
                 entry.recordingSource = metadata.recordingSource ?? .inferred(appName: metadata.appName)
                 builders[id] = entry
             } else if name.hasSuffix(RecordingBookmarksStore.filenameSuffix) {
@@ -353,19 +397,90 @@ enum RecordingLibraryIndex {
             }
     }
 
-    static func updateCategory(for item: RecordingLibraryItem, category: String, outputDirectory: URL) throws {
+    static func assign(
+        workspaceID: UUID?,
+        to item: RecordingLibraryItem,
+        outputDirectory: URL,
+    ) throws {
         let openedScope = outputDirectory.startAccessingSecurityScopedResource()
         defer { if openedScope { outputDirectory.stopAccessingSecurityScopedResource() } }
         let recordingsDirectory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
-        let trimmedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines)
+        let old = RecordingLibraryMetadata.read(fromDirectory: recordingsDirectory, basename: item.id)
         try RecordingLibraryMetadata(
-            title: item.title,
-            appName: item.appName ?? "Unknown",
+            title: old?.title ?? item.sourceTitle,
+            appName: old?.appName ?? item.appName ?? "Unknown",
             recordedAt: item.recordedAt,
             participants: item.participants,
-            category: trimmedCategory.isEmpty ? nil : trimmedCategory,
+            customTitle: old?.customTitle,
+            workspaceID: workspaceID,
+            editedAudio: old?.editedAudio ?? item.editedAudio,
+            audioFilename: old?.audioFilename,
             recordingSource: item.recordingSource,
         ).write(toDirectory: recordingsDirectory, basename: item.id)
+    }
+
+    static func rename(_ item: RecordingLibraryItem, to title: String, outputDirectory: URL) throws {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { throw RecordingLibraryRenameError.emptyTitle }
+        let openedScope = outputDirectory.startAccessingSecurityScopedResource()
+        defer { if openedScope { outputDirectory.stopAccessingSecurityScopedResource() } }
+        let recordingsDirectory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
+        let old = RecordingLibraryMetadata.read(fromDirectory: recordingsDirectory, basename: item.id)
+        try RecordingLibraryMetadata(
+            title: old?.title ?? item.sourceTitle,
+            appName: old?.appName ?? item.appName ?? "Unknown",
+            recordedAt: item.recordedAt,
+            participants: item.participants,
+            customTitle: trimmedTitle == item.sourceTitle ? nil : trimmedTitle,
+            workspaceID: old?.workspaceID ?? item.workspaceID,
+            editedAudio: old?.editedAudio ?? item.editedAudio,
+            audioFilename: old?.audioFilename,
+            recordingSource: item.recordingSource,
+        ).write(toDirectory: recordingsDirectory, basename: item.id)
+    }
+
+    static func saveEditedAudio(
+        _ editedAudio: [RecordingEditedAudio],
+        for item: RecordingLibraryItem,
+        outputDirectory: URL,
+    ) throws {
+        let openedScope = outputDirectory.startAccessingSecurityScopedResource()
+        defer { if openedScope { outputDirectory.stopAccessingSecurityScopedResource() } }
+        let recordingsDirectory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
+        let old = RecordingLibraryMetadata.read(fromDirectory: recordingsDirectory, basename: item.id)
+        try RecordingLibraryMetadata(
+            title: old?.title ?? item.sourceTitle,
+            appName: old?.appName ?? item.appName ?? "Unknown",
+            recordedAt: item.recordedAt,
+            participants: item.participants,
+            customTitle: old?.customTitle,
+            workspaceID: old?.workspaceID ?? item.workspaceID,
+            editedAudio: editedAudio,
+            audioFilename: old?.audioFilename,
+            recordingSource: item.recordingSource,
+        ).write(toDirectory: recordingsDirectory, basename: item.id)
+    }
+
+    static func assigning(_ item: RecordingLibraryItem, workspaceID: UUID?) -> RecordingLibraryItem {
+        RecordingLibraryItem(
+            id: item.id,
+            title: item.title,
+            sourceTitle: item.sourceTitle,
+            recordedAt: item.recordedAt,
+            appName: item.appName,
+            participants: item.participants,
+            workspaceID: workspaceID,
+            legacyCategory: nil,
+            recordingSource: item.recordingSource,
+            bookmarks: item.bookmarks,
+            editedAudio: item.editedAudio,
+            transcriptURL: item.transcriptURL,
+            originalTranscriptURL: item.originalTranscriptURL,
+            protocolURL: item.protocolURL,
+            audioURL: item.audioURL,
+            pipelineStatus: item.pipelineStatus,
+            error: item.error,
+        )
     }
 
     /// Permanently removes Sawti's saved files for one library entry. Only
@@ -396,6 +511,8 @@ enum RecordingLibraryIndex {
                 || name == "\(item.id)\(RecordingSidecar.filenameSuffix)"
                 || name == "\(item.id)\(RecordingFileSuffix.inProgress)"
                 || RecordingFileSuffix.stripAppRaw(from: name) == item.id
+                || name.hasPrefix("\(item.id)_source.")
+                || name.hasPrefix("\(item.id)_edit_")
                 || name == "\(item.id)\(SpeakerNamingStore.namingJSONSuffix)"
                 || name == "\(item.id)\(SpeakerNamingStore.segmentsSuffix)"
             if belongsToRecording { include(file, directlyIn: recordingsDirectory) }
@@ -436,6 +553,9 @@ enum RecordingLibraryIndex {
             }
         }
         if let audioURL = item.audioURL { include(audioURL, directlyIn: recordingsDirectory) }
+        for asset in item.editedAudio {
+            include(recordingsDirectory.appendingPathComponent(asset.filename), directlyIn: recordingsDirectory)
+        }
 
         var failures = 0
         for file in filesToDelete.values {
@@ -517,5 +637,13 @@ struct RecordingLibraryDeletionError: LocalizedError {
 
     var errorDescription: String? {
         "Sawti could not remove \(failedFileCount) saved file(s). Some files may still be present."
+    }
+}
+
+enum RecordingLibraryRenameError: LocalizedError {
+    case emptyTitle
+
+    var errorDescription: String? {
+        "A recording title cannot be empty."
     }
 }

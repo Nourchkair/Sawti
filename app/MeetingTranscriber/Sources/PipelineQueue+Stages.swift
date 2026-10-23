@@ -131,7 +131,8 @@ extension PipelineQueue {
             bookmarks: job.bookmarks ?? [],
             // Anchor the basename on the meeting start; reimport/orphan jobs
             // have no recorded start, so fall back to the enqueue time.
-            slug: namingSlug(title: job.meetingTitle, jobID: job.id, startTime: job.artifactStartTime),
+            slug: job.libraryRecordingID
+                ?? namingSlug(title: job.meetingTitle, jobID: job.id, startTime: job.artifactStartTime),
         )
     }
 
@@ -893,13 +894,25 @@ extension PipelineQueue {
         )
 
         do {
-            let existingCategory = RecordingLibraryMetadata.read(fromDirectory: recordingsDir, basename: ctx.slug)?.category
+            let existing = RecordingLibraryMetadata.read(fromDirectory: recordingsDir, basename: ctx.slug)
+            let savedAudioURL = jobs.first(where: { $0.id == ctx.jobID })?.mixPath
+            let audioFilename: String? = if let savedAudioURL,
+                                            savedAudioURL.standardizedFileURL.deletingLastPathComponent().path
+                                            == recordingsDir.standardizedFileURL.path {
+                savedAudioURL.lastPathComponent
+            } else {
+                existing?.audioFilename
+            }
             try RecordingLibraryMetadata(
-                title: ctx.title,
+                title: existing?.title ?? ctx.title,
                 appName: ctx.appName,
                 recordedAt: ctx.recordedAt,
                 participants: ctx.participants,
-                category: existingCategory,
+                category: existing?.category,
+                customTitle: existing?.customTitle,
+                workspaceID: existing?.workspaceID,
+                editedAudio: existing?.editedAudio,
+                audioFilename: audioFilename,
                 recordingSource: ctx.recordingSource ?? .inferred(appName: ctx.appName),
             ).write(toDirectory: recordingsDir, basename: ctx.slug)
         } catch {
@@ -1126,8 +1139,32 @@ extension PipelineQueue {
                 return src
 
             case .leaveInPlace:
-                logger.info("Imported audio left in place: \(src.lastPathComponent, privacy: .private)")
-                return src
+                // Keep the user's selected source untouched, and also keep an
+                // app-owned copy so this Library recording remains playable if
+                // the original file is later moved or removed.
+                let copiedDestination: URL
+                if suffix == RecordingFileSuffix.mix, src.pathExtension.lowercased() != "wav" {
+                    copiedDestination = outputDir.appendingPathComponent(
+                        "\(ctx.slug)_source.\(src.pathExtension)",
+                    )
+                } else {
+                    copiedDestination = dst
+                }
+                if fm.fileExists(atPath: copiedDestination.path) {
+                    logger.info("Imported audio copy already exists: \(copiedDestination.lastPathComponent, privacy: .private)")
+                    return copiedDestination
+                }
+                let sourceScopeOpened = src.startAccessingSecurityScopedResource()
+                defer { if sourceScopeOpened { src.stopAccessingSecurityScopedResource() } }
+                do {
+                    try fm.copyItem(at: src, to: copiedDestination)
+                    try fm.restrictToOwner(copiedDestination)
+                    logger.info("Imported audio copied into Library: \(copiedDestination.lastPathComponent, privacy: .private)")
+                    return copiedDestination
+                } catch {
+                    logger.warning("Failed to copy imported audio into Library: \(error.localizedDescription, privacy: .private)")
+                    return src
+                }
 
             case .move:
                 break

@@ -183,9 +183,10 @@ struct MenuBarView: View {
         Button {
             onOpenLibrary()
         } label: {
-            Label("Library…", systemImage: "waveform")
+            Label("Library", systemImage: "waveform")
         }
         .keyboardShortcut("p")
+        .help("Open your recordings, transcripts, and workspaces")
     }
 
     @ViewBuilder private var processingQueue: some View {

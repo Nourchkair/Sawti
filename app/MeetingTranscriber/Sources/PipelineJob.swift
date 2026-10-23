@@ -136,6 +136,10 @@ struct PipelineJob: Identifiable, Codable {
     var rawTranscriptPath: URL?
     var protocolPath: URL?
     var namingSlug: String?
+    /// Existing Library record whose transcript is being created or refreshed.
+    /// Reprocessing from the Library keeps audio, transcript, and notes under
+    /// the same durable recording identity. Optional for old queue snapshots.
+    var libraryRecordingID: String?
     // Output policy captured when this job enters the queue. Optional so
     // snapshots saved before transcript-output options existed still decode.
     // Nil falls back to the queue's legacy-compatible defaults.
@@ -279,6 +283,7 @@ struct PipelineJob: Identifiable, Codable {
         bookmarks: [RecordingBookmark]? = nil,
         meetingStartTime: Date? = nil,
         autoSkipNaming: Bool = false,
+        libraryRecordingID: String? = nil,
         // swiftlint:disable:next discouraged_optional_boolean
         includeFullTranscriptInProtocol: Bool? = nil,
         // swiftlint:disable:next discouraged_optional_boolean
@@ -305,6 +310,7 @@ struct PipelineJob: Identifiable, Codable {
         self.rawTranscriptPath = nil
         self.protocolPath = nil
         self.namingSlug = nil
+        self.libraryRecordingID = libraryRecordingID
         self.includeFullTranscriptInProtocol = includeFullTranscriptInProtocol
         self.saveRawTranscriptSeparately = saveRawTranscriptSeparately
         self.usedDiarizerMode = nil

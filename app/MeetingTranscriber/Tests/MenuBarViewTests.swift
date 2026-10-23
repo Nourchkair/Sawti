@@ -468,7 +468,7 @@ final class MenuBarViewTests: XCTestCase {
             onQuit: {},
         )
         let body = try sut.inspect()
-        try body.find(button: "Library…").tap()
+        try body.find(button: "Library").tap()
         XCTAssertTrue(called)
     }
 
@@ -749,7 +749,7 @@ final class MenuBarViewTests: XCTestCase {
     func testProcessFilesButtonAlwaysExists() throws {
         let sut = makeView(status: makeStatus(state: .idle))
         let body = try sut.inspect()
-        XCTAssertNoThrow(try body.find(text: "Library…"))
+        XCTAssertNoThrow(try body.find(text: "Library"))
     }
 
     // MARK: - Error job display
