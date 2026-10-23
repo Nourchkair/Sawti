@@ -202,7 +202,8 @@ extension SpeakerNamingSession {
             }
 
             speakerNamingDataByJob[jobID] = newNamingData
-            let saved = saveNamingData(
+            let hasUnidentifiedSpeakers = !Self.unresolvedSpeakerLabels(in: newNamingData.mapping).isEmpty
+            let saved = hasUnidentifiedSpeakers && saveNamingData(
                 newNamingData, slug: slug, in: recordingsDir.deletingLastPathComponent(),
             )
             // Re-segment the saved transcript to match the fresh diarization.
@@ -227,6 +228,27 @@ extension SpeakerNamingSession {
                 // nothing had recorded yet.
                 wroteSidecarsIn: saved ? recordingsDir.deletingLastPathComponent() : nil,
             )
+
+            if !hasUnidentifiedSpeakers {
+                recordAutomaticResolution(
+                    jobID: jobID, title: title, mapping: newNamingData.mapping,
+                )
+                removeNamingData(
+                    jobID: jobID, slug: slug,
+                    in: [recordingsDir.deletingLastPathComponent()],
+                )
+                if let transcriptPath = delegate.job(withID: jobID)?.transcriptPath,
+                   let transcript = try? String(contentsOf: transcriptPath, encoding: .utf8) {
+                    await delegate.generateProtocol(
+                        jobID: jobID,
+                        transcript: transcript,
+                        title: title,
+                        protocolsDir: transcriptPath.deletingLastPathComponent(),
+                    )
+                }
+                delegate.updateJobState(id: jobID, to: .done)
+                return
+            }
 
             delegate.updateJobState(id: jobID, to: .speakerNamingPending)
             NotificationCenter.default.post(name: .showSpeakerNaming, object: nil)

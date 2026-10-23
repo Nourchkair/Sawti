@@ -40,7 +40,7 @@ final class RecordingSidecarTests: XCTestCase {
         let sidecar = makeFullSidecar()
         let dict = try encodeAsDict(sidecar)
 
-        XCTAssertEqual(dict["version"] as? Int, 2)
+        XCTAssertEqual(dict["version"] as? Int, 3)
         XCTAssertEqual(dict["title"] as? String, "Standup")
         XCTAssertEqual(dict["appName"] as? String, "Microsoft Teams")
         XCTAssertEqual(dict["participants"] as? [String], ["Alice", "Bob"])
@@ -141,7 +141,7 @@ final class RecordingSidecarTests: XCTestCase {
         let decoded = try XCTUnwrap(readRawSidecar(
             """
             {
-              "version": 3,
+              "version": 4,
               "title": "Future Standup",
               "appName": "Zoom",
               "startedAt": "2026-05-03T08:30:00Z",

@@ -11,8 +11,8 @@ struct RecordingSidecar: Codable {
 
     /// Schema version stamped into every new sidecar. Bump when fields are
     /// added/removed/repurposed so downstream consumers can branch on it.
-    /// 2 added `trigger`.
-    static let currentVersion = 2
+    /// 2 added `trigger`; 3 adds the explicit active-speaker timeline.
+    static let currentVersion = 3
 
     /// How the recording was started. Consumers apply different policies to
     /// the two: a very short auto capture is usually a false trigger worth
@@ -34,6 +34,9 @@ struct RecordingSidecar: Codable {
     let participants: [String]
     let micDelaySeconds: TimeInterval
     let files: Files
+    /// Names and timing observed from an explicit active-speaker cue while
+    /// recording. Optional so older record-only sidecars continue decoding.
+    let activeSpeakerIntervals: [ActiveSpeakerInterval]?
 
     /// Raw storage so an unrecognised value decodes as `nil` instead of
     /// throwing. `read()` swallows decode errors, so a strict `Trigger?` would
@@ -56,7 +59,7 @@ struct RecordingSidecar: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case version, title, appName, startedAt, stoppedAt
-        case participants, micDelaySeconds, files
+        case participants, micDelaySeconds, files, activeSpeakerIntervals
         case triggerRaw = "trigger"
     }
 
@@ -71,6 +74,7 @@ struct RecordingSidecar: Codable {
         mixFilename: String,
         appFilename: String?,
         micFilename: String?,
+        activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
     ) {
         self.version = Self.currentVersion
         self.title = title
@@ -81,6 +85,7 @@ struct RecordingSidecar: Codable {
         self.micDelaySeconds = micDelaySeconds
         self.triggerRaw = trigger.rawValue
         self.files = Files(mix: mixFilename, app: appFilename, mic: micFilename)
+        self.activeSpeakerIntervals = activeSpeakerIntervals
     }
 
     /// Writes the sidecar as `<basename>\(filenameSuffix)` into `directory`.

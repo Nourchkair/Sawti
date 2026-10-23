@@ -8,11 +8,14 @@ struct RecordingLibraryWindow: View {
     let outputDirectory: URL
     let jobs: [PipelineJob]
     let onOpenTranscript: (URL) -> Void
+    let onImportMedia: () -> Void
+    let onTranscribe: ([URL]) -> Void
 
     @State private var recordings: [RecordingLibraryItem] = []
     @State private var selectedID: String?
     @State private var searchText = ""
-    @State private var courseFilter = RecordingCourseFilter.all
+    @State private var categoryFilter = RecordingCategoryFilter.all
+    @State private var sourceFilter = RecordingSourceFilter.all
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var activeReloadID: UUID?
@@ -33,23 +36,23 @@ struct RecordingLibraryWindow: View {
     private var filteredEntries: [RecordingLibraryItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return entries.filter { item in
-            let courseMatches: Bool
-            switch courseFilter {
-            case .all: courseMatches = true
-            case .unassigned: courseMatches = item.course?.isEmpty != false
-            case let .named(course): courseMatches = item.course == course
+            let categoryMatches: Bool
+            switch categoryFilter {
+            case .all: categoryMatches = true
+            case .unassigned: categoryMatches = item.category?.isEmpty != false
+            case let .named(category): categoryMatches = item.category == category
             }
-            guard courseMatches else { return false }
+            guard categoryMatches, sourceFilter.matches(item.recordingSource) else { return false }
             guard !query.isEmpty else { return true }
             let metadata = [item.title, item.appName ?? "", item.participants.joined(separator: " "),
-                            item.course ?? "", item.statusLabel]
+                            item.category ?? "", item.statusLabel]
                 .joined(separator: " ").lowercased()
             return metadata.contains(query) || (transcriptSearchIndex[item.id] ?? "").contains(query)
         }
     }
 
-    private var availableCourses: [String] {
-        Array(Set(entries.compactMap(\.course).filter { !$0.isEmpty })).sorted {
+    private var availableCategories: [String] {
+        Array(Set(entries.compactMap(\.category).filter { !$0.isEmpty })).sorted {
             $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
         }
     }
@@ -67,11 +70,28 @@ struct RecordingLibraryWindow: View {
         return "\(outputDirectory.path)|\(jobKey)"
     }
 
+    private func isTranscribing(_ item: RecordingLibraryItem) -> Bool {
+        let sourcePaths = Set(item.transcriptionURLs(outputDirectory: outputDirectory).map {
+            $0.standardizedFileURL.path
+        })
+        return jobs.contains { job in
+            guard !job.state.isTerminal else { return false }
+            return [job.mixPath, job.appPath, job.micPath].compactMap(\.self).contains {
+                sourcePaths.contains($0.standardizedFileURL.path)
+            } || job.namingSlug == item.id
+        }
+    }
+
     var body: some View {
         NavigationSplitView {
             libraryList
-                .navigationTitle("Recordings")
+                .navigationTitle("Library")
                 .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Import Media…", systemImage: "tray.and.arrow.down") {
+                            onImportMedia()
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button("Refresh", systemImage: "arrow.clockwise") {
                             Task { await reload() }
@@ -85,7 +105,9 @@ struct RecordingLibraryWindow: View {
                     item: selectedEntry,
                     outputDirectory: outputDirectory,
                     onOpenTranscript: onOpenTranscript,
-                    onCourseChanged: { course in updateCourse(for: selectedEntry, to: course) },
+                    onTranscribe: onTranscribe,
+                    isTranscribing: isTranscribing(selectedEntry),
+                    onCategoryChanged: { category in updateCategory(for: selectedEntry, to: category) },
                 )
                 .id(selectedEntry.id)
             } else if isLoading {
@@ -111,7 +133,12 @@ struct RecordingLibraryWindow: View {
                 selectedID = filteredEntries.first?.id
             }
         }
-        .onChange(of: courseFilter) { _, _ in
+        .onChange(of: categoryFilter) { _, _ in
+            if !filteredEntries.contains(where: { $0.id == selectedID }) {
+                selectedID = filteredEntries.first?.id
+            }
+        }
+        .onChange(of: sourceFilter) { _, _ in
             if !filteredEntries.contains(where: { $0.id == selectedID }) {
                 selectedID = filteredEntries.first?.id
             }
@@ -124,11 +151,18 @@ struct RecordingLibraryWindow: View {
                 .textFieldStyle(.roundedBorder)
                 .padding(12)
 
-            Picker("Course", selection: $courseFilter) {
-                Text("All Courses").tag(RecordingCourseFilter.all)
-                Text("Unassigned").tag(RecordingCourseFilter.unassigned)
-                ForEach(availableCourses, id: \.self) { course in
-                    Text(course).tag(RecordingCourseFilter.named(course))
+            Picker("Type", selection: $sourceFilter) {
+                ForEach(RecordingSourceFilter.allCases) { filter in
+                    Text(filter.label).tag(filter)
+                }
+            }
+            .padding([.horizontal, .bottom], 8)
+
+            Picker("Category", selection: $categoryFilter) {
+                Text("All Categories").tag(RecordingCategoryFilter.all)
+                Text("Unassigned").tag(RecordingCategoryFilter.unassigned)
+                ForEach(availableCategories, id: \.self) { category in
+                    Text(category).tag(RecordingCategoryFilter.named(category))
                 }
             }
             .padding([.horizontal, .bottom], 10)
@@ -138,11 +172,11 @@ struct RecordingLibraryWindow: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredEntries.isEmpty {
                 ContentUnavailableView(
-                    searchText.isEmpty ? "No Recordings Yet" : "No Matches",
+                    searchText.isEmpty ? "Library Is Empty" : "No Matches",
                     systemImage: searchText.isEmpty ? "waveform" : "magnifyingglass",
                     description: Text(searchText.isEmpty
-                        ? "Completed transcripts and saved recordings will appear here."
-                        : "Try another title, participant, course, or phrase from a transcript."),
+                        ? "Saved meetings, microphone and app recordings, and imported media will appear here. Use Import Media to add a file."
+                        : "Try another title, participant, category, or phrase from a transcript."),
                 )
             } else {
                 List(selection: $selectedID) {
@@ -201,30 +235,55 @@ struct RecordingLibraryWindow: View {
         isLoading = false
     }
 
-    private func updateCourse(for item: RecordingLibraryItem, to course: String) {
+    private func updateCategory(for item: RecordingLibraryItem, to category: String) {
         do {
-            try RecordingLibraryIndex.updateCourse(for: item, course: course, outputDirectory: outputDirectory)
-            let normalized = course.trimmingCharacters(in: .whitespacesAndNewlines)
+            try RecordingLibraryIndex.updateCategory(for: item, category: category, outputDirectory: outputDirectory)
+            let normalized = category.trimmingCharacters(in: .whitespacesAndNewlines)
             if let index = recordings.firstIndex(where: { $0.id == item.id }) {
                 let old = recordings[index]
                 recordings[index] = RecordingLibraryItem(
                     id: old.id, title: old.title, recordedAt: old.recordedAt, appName: old.appName,
-                    participants: old.participants, course: normalized.isEmpty ? nil : normalized,
+                    participants: old.participants, category: normalized.isEmpty ? nil : normalized,
+                    recordingSource: old.recordingSource,
                     bookmarks: old.bookmarks, transcriptURL: old.transcriptURL,
                     originalTranscriptURL: old.originalTranscriptURL, protocolURL: old.protocolURL,
                     audioURL: old.audioURL, pipelineStatus: old.pipelineStatus, error: old.error,
                 )
             }
         } catch {
-            loadError = "Sawti could not save this course label. Check access to the output folder."
+            loadError = "Sawti could not save this category. Check access to the output folder."
         }
     }
 }
 
-private enum RecordingCourseFilter: Hashable {
+private enum RecordingCategoryFilter: Hashable {
     case all
     case unassigned
     case named(String)
+}
+
+private enum RecordingSourceFilter: String, CaseIterable, Identifiable {
+    case all
+    case meeting
+    case microphone
+    case app
+    case imported
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .all: "All Types"
+        case .meeting: "Meetings"
+        case .microphone: "Microphone"
+        case .app: "App Recordings"
+        case .imported: "Imported Files"
+        }
+    }
+
+    func matches(_ source: RecordingSourceKind) -> Bool {
+        self == .all || rawValue == source.rawValue
+    }
 }
 
 private struct RecordingLibraryRow: View {
@@ -232,7 +291,7 @@ private struct RecordingLibraryRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: item.transcriptURL == nil ? "waveform" : "doc.text")
+            Image(systemName: item.transcriptURL == nil ? item.recordingSource.symbolName : "doc.text")
                 .foregroundStyle(.secondary)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 4) {
@@ -248,11 +307,14 @@ private struct RecordingLibraryRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                Text(item.recordingSource.label)
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentColor)
                 Text(item.statusLabel)
                     .font(.caption2)
                     .foregroundStyle(item.error == nil ? Color.secondary : Color.red)
-                if let course = item.course, !course.isEmpty {
-                    Text(course)
+                if let category = item.category, !category.isEmpty {
+                    Text(category)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.accentColor)
                         .lineLimit(1)
@@ -268,12 +330,19 @@ private struct RecordingLibraryDetail: View {
     let item: RecordingLibraryItem
     let outputDirectory: URL
     let onOpenTranscript: (URL) -> Void
-    let onCourseChanged: (String) -> Void
+    let onTranscribe: ([URL]) -> Void
+    let isTranscribing: Bool
+    let onCategoryChanged: (String) -> Void
 
     @StateObject private var playback = RecordingAudioPlayback()
     @State private var transcriptText: String?
     @State private var transcriptLoadFailed = false
-    @State private var course = ""
+    @State private var category = ""
+
+    private var transcriptionButtonTitle: String {
+        if isTranscribing { return "Processing…" }
+        return item.transcriptURL == nil ? "Transcribe" : "Transcribe Again"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -282,7 +351,7 @@ private struct RecordingLibraryDetail: View {
             transcriptBody
         }
         .task(id: item.id) {
-            course = item.course ?? ""
+            category = item.category ?? ""
             await loadTranscript()
         }
         .onDisappear { playback.stop() }
@@ -294,6 +363,7 @@ private struct RecordingLibraryDetail: View {
                 .font(.title2.weight(.semibold))
                 .textSelection(.enabled)
             HStack(spacing: 12) {
+                Label(item.recordingSource.label, systemImage: item.recordingSource.symbolName)
                 Label(item.recordedAt.formatted(date: .complete, time: .shortened), systemImage: "calendar")
                 if let appName = item.appName, !appName.isEmpty {
                     Label(appName, systemImage: "app")
@@ -310,18 +380,30 @@ private struct RecordingLibraryDetail: View {
             }
 
             HStack(spacing: 8) {
-                TextField("Course (optional)", text: $course)
+                TextField("Category (optional)", text: $category)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 260)
-                    .disabled(!canSaveCourse)
-                Button("Save Course") { onCourseChanged(course) }
-                    .disabled(!canSaveCourse || course.trimmingCharacters(in: .whitespacesAndNewlines) == (item.course ?? ""))
-                Text(canSaveCourse ? "Saved locally with this recording" : "Available after processing finishes")
+                    .disabled(!canSaveCategory)
+                Button("Save Category") { onCategoryChanged(category) }
+                    .disabled(!canSaveCategory || category.trimmingCharacters(in: .whitespacesAndNewlines) == (item.category ?? ""))
+                Text(canSaveCategory ? "Saved locally with this recording" : "Available after processing finishes")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 8) {
+                if item.audioURL != nil {
+                    Button {
+                        let urls = item.transcriptionURLs(outputDirectory: outputDirectory)
+                        if !urls.isEmpty { onTranscribe(urls) }
+                    } label: {
+                        Label(
+                            transcriptionButtonTitle,
+                            systemImage: "waveform",
+                        )
+                    }
+                    .disabled(isTranscribing)
+                }
                 if let audioURL = item.audioURL {
                     Button {
                         if playback.isPlaying {
@@ -401,7 +483,7 @@ private struct RecordingLibraryDetail: View {
         .padding(20)
     }
 
-    private var canSaveCourse: Bool {
+    private var canSaveCategory: Bool {
         !item.id.hasPrefix("job-")
     }
 

@@ -1,7 +1,6 @@
 import UniformTypeIdentifiers
 
-/// File types offered by the two `NSOpenPanel` import pickers: batch file import
-/// and voice enrollment.
+/// File types offered by the Library media-import panel and voice enrollment.
 ///
 /// Phone and messenger voice formats sit in the unconditional list because
 /// AudioToolbox reads them natively — `.amr`, `.3gp`/`.3g2` (AMR or AAC payload)
@@ -30,7 +29,7 @@ enum AudioImportTypes {
         .wav, .mp3, .aiff, .mpeg4Audio, .mpeg4Movie, .quickTimeMovie,
     ] + (extraNativeExtensions + phoneContainerExtensions).compactMap { UTType(filenameExtension: $0) }
 
-    /// Types for the batch import panel (⌘P).
+    /// Types for the Library's media-import panel.
     static func pickerTypes(ffmpegAvailable: Bool) -> [UTType] {
         nativeTypes + (ffmpegAvailable ? FFmpegHelper.ffmpegOnlyTypes : [])
     }

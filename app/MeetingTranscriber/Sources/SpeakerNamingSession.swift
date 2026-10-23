@@ -284,8 +284,8 @@ final class SpeakerNamingSession {
     /// transcript. Parks the job for the (possibly late) naming dialog by
     /// stashing `SpeakerNamingData`; the dialog is driven later by
     /// `completeSpeakerNaming`, so this stage never blocks the pipeline. A job
-    /// that opts out via `autoSkipNaming` (headless blocking-transcribe)
-    /// finishes on the auto-names without a dialog.
+    /// that has unresolved speakers parks for the dialog; a fully matched
+    /// interactive job can continue without asking for an unnecessary confirm.
     func resolveSpeakerNames(
         diarization: DiarizationResult,
         job: (jobID: UUID, title: String, slug: String, participants: [String]),
@@ -294,18 +294,22 @@ final class SpeakerNamingSession {
         activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
     ) -> [String: String] {
         let (jobID, title, slug, participants) = job
-        // No embeddings → no matching or dialog; keep the diarizer's own names.
-        guard let embeddings = diarization.embeddings else { return diarization.autoNames }
-
-        let matcher = speakerMatcherFactory()
-        let verbose = matcher.matchVerbose(embeddings: embeddings)
-        let matched = verbose.mapValues(\.assignedName)
+        let segments = diarization.segments.map {
+            SpeakerNamingData.Segment(start: $0.start, end: $0.end, speaker: $0.speaker)
+        }
+        // The screen-observed active-speaker timeline is independent of voice
+        // embeddings. If embeddings are unavailable, retain the diarizer's
+        // labels and still let the user name any speakers that remain unknown.
+        let embeddings = diarization.embeddings
+        let verbose = embeddings.map { speakerMatcherFactory().matchVerbose(embeddings: $0) } ?? [:]
+        var matched = embeddings == nil ? diarization.autoNames : verbose.mapValues(\.assignedName)
+        for label in Set(segments.map(\.speaker)) where matched[label] == nil {
+            matched[label] = label
+        }
         let autoNames = ActiveSpeakerNameMatcher.applying(
             activeSpeakerIntervals,
             to: matched,
-            segments: diarization.segments.map {
-                SpeakerNamingData.Segment(start: $0.start, end: $0.end, speaker: $0.speaker)
-            },
+            segments: segments,
             speakingTimes: diarization.speakingTimes,
         )
         let activeSpeakerNamesApplied = autoNames.count { matched[$0.key] != $0.value }
@@ -313,10 +317,26 @@ final class SpeakerNamingSession {
         let topCandidates = verbose.mapValues(\.topCandidates)
 
         let suggestedAtDialog = autoNames
-        let autoMatched = matched.count { $0.key != $0.value }
+        let autoMatched = autoNames.count { $0.key != $0.value }
         logger.info(
-            "[recognition] \(matched.count) speakers, \(autoMatched) auto, \(matched.count - autoMatched) unknown",
+            "[recognition] \(autoNames.count) speakers, \(autoMatched) auto, \(autoNames.count - autoMatched) unknown",
         )
+
+        // An interactive dialog is only useful when someone still needs a
+        // name. Keep the durable slug/mode metadata, log the successful
+        // automatic mapping, and let the pipeline continue straight to the
+        // protocol step when every speaker has reliable evidence.
+        if Self.unresolvedSpeakerLabels(in: autoNames).isEmpty,
+           delegate?.job(withID: jobID)?.autoSkipNaming != true {
+            delegate?.setNamingMetadata(
+                jobID: jobID, slug: slug, usedDiarizerMode: diarizeProcess.mode, wroteSidecarsIn: nil,
+            )
+            recordAutomaticResolution(
+                jobID: jobID, title: title, mapping: autoNames, topCandidates: topCandidates,
+            )
+            delegate?.namingStageDidEnd()
+            return autoNames
+        }
 
         // Use persisted 16kHz path (survives workDir cleanup).
         let persistedAudioPath = outputDir.appendingPathComponent("recordings")
@@ -326,11 +346,9 @@ final class SpeakerNamingSession {
             meetingTitle: title,
             mapping: autoNames,
             speakingTimes: diarization.speakingTimes,
-            embeddings: embeddings,
+            embeddings: embeddings ?? [:],
             audioPath: persistedAudioPath,
-            segments: diarization.segments.map { seg in
-                SpeakerNamingData.Segment(start: seg.start, end: seg.end, speaker: seg.speaker)
-            },
+            segments: segments,
             participants: participants,
             activeSpeakerIntervals: activeSpeakerIntervals,
             isDualSource: isDualSource,
@@ -373,6 +391,34 @@ final class SpeakerNamingSession {
         // `completeSpeakerNaming` without blocking.
         speakerNamingDataByJob[jobID] = namingData
         return autoNames
+    }
+
+    /// Speaker labels with no usable name suggestion. `label` itself is the
+    /// sentinel used by the matcher when it cannot identify that voice.
+    static func unresolvedSpeakerLabels(in mapping: [String: String]) -> [String] {
+        mapping.compactMap { label, name in
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty || trimmed == label ? label : nil
+        }.sorted()
+    }
+
+    /// Store recognition evidence for a fully automatic resolution without
+    /// retaining a dialog-only cache after the job continues.
+    func recordAutomaticResolution(
+        jobID: UUID,
+        title: String,
+        mapping: [String: String],
+        topCandidates: [String: [TopCandidate]] = [:],
+    ) {
+        stashedSuggestedAtDialog[jobID] = mapping
+        stashedTopCandidates[jobID] = topCandidates
+        recordRecognition(
+            jobID: jobID, title: title,
+            userMapping: mapping, fallback: mapping,
+            source: .automatic,
+        )
+        stashedSuggestedAtDialog.removeValue(forKey: jobID)
+        stashedTopCandidates.removeValue(forKey: jobID)
     }
 
     // MARK: - Persistence

@@ -13,6 +13,9 @@ enum RecognitionAction: String, Codable, CaseIterable {
 /// otherwise produce byte-identical rows — the question that had to be answered
 /// by hand when triaging a naming window that closed without anyone deciding.
 enum RecognitionSource: String, Codable {
+    /// Every diarized speaker received a reliable match, so no naming dialog
+    /// was needed.
+    case automatic
     /// The "Name Speakers" window: someone clicked Confirm or Skip.
     case dialog
     /// Resolved over the automation API rather than by a person at the screen.

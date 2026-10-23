@@ -534,6 +534,7 @@ class WatchLoop {
                     recording: recording,
                     trigger: trigger,
                     participants: participants,
+                    activeSpeakerIntervals: activeSpeakerIntervals,
                     bookmarks: bookmarks,
                 )
             } catch {
@@ -564,6 +565,7 @@ class WatchLoop {
             micPath: recording.micPath,
             micDelay: recording.micDelay,
             participants: participants,
+            recordingSource: RecordingSourceKind.captured(trigger: trigger, appName: appName),
             activeSpeakerIntervals: activeSpeakerIntervals,
             bookmarks: bookmarks,
             meetingStartTime: recording.recordingStartDate,

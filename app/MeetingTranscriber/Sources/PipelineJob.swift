@@ -72,6 +72,9 @@ struct PipelineJob: Identifiable, Codable {
     private(set) var micPath: URL?
     let micDelay: TimeInterval
     let participants: [String]
+    /// Origin of the audio for library filtering. Optional so queue snapshots
+    /// created by older Sawti versions remain decodable.
+    var recordingSource: RecordingSourceKind?
     /// Explicit active-speaker UI observations captured during a live meeting.
     /// Optional so queue snapshots written before this feature continue decoding.
     var activeSpeakerIntervals: [ActiveSpeakerInterval]?
@@ -271,6 +274,7 @@ struct PipelineJob: Identifiable, Codable {
         micPath: URL?,
         micDelay: TimeInterval,
         participants: [String] = [],
+        recordingSource: RecordingSourceKind? = nil,
         activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
         bookmarks: [RecordingBookmark]? = nil,
         meetingStartTime: Date? = nil,
@@ -288,6 +292,7 @@ struct PipelineJob: Identifiable, Codable {
         self.micPath = micPath
         self.micDelay = micDelay
         self.participants = participants
+        self.recordingSource = recordingSource
         self.activeSpeakerIntervals = activeSpeakerIntervals
         self.bookmarks = bookmarks
         self.enqueuedAt = Date()

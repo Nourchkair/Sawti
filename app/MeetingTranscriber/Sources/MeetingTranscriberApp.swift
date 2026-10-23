@@ -156,7 +156,6 @@ struct MeetingTranscriberApp: App {
                 openWindow(id: "transcript", value: url)
                 NSApp.activate(ignoringOtherApps: true)
             },
-            onOpenRecordings: { bringWindowToFront(id: "recordings") },
             onOpenProtocolsFolder: openProtocolsFolder,
             onOpenSettings: {
                 bringWindowToFront(id: "settings")
@@ -164,7 +163,7 @@ struct MeetingTranscriberApp: App {
             onNameSpeakers: appState.hasPendingSpeakerNamingJobs ? {
                 bringWindowToFront(id: "speaker-naming")
             } : nil,
-            onProcessFiles: processAudioFiles,
+            onOpenLibrary: { bringWindowToFront(id: "recordings") },
             onDismissJob: { id in appState.pipelineQueue.removeJob(id: id) },
             onQuit: quit,
         )
@@ -314,7 +313,7 @@ struct MeetingTranscriberApp: App {
     }
 
     private var recordingsWindow: some Scene {
-        Window("Recordings", id: "recordings") {
+        Window("Library", id: "recordings") {
             RecordingLibraryWindow(
                 outputDirectory: appState.settings.effectiveOutputDir,
                 jobs: appState.pipeline.queue.jobs,
@@ -322,6 +321,8 @@ struct MeetingTranscriberApp: App {
                     openWindow(id: "transcript", value: url)
                     NSApp.activate(ignoringOtherApps: true)
                 },
+                onImportMedia: importAudioVideoFiles,
+                onTranscribe: { urls in appState.pipeline.enqueueFiles(urls) },
             )
         }
         .defaultSize(width: 1120, height: 760)
@@ -386,7 +387,7 @@ struct MeetingTranscriberApp: App {
 
     // MARK: - UI Actions
 
-    private func processAudioFiles() {
+    private func importAudioVideoFiles() {
         let panel = NSOpenPanel()
         panel.title = "Select Audio or Video Files"
         panel.allowedContentTypes = AudioImportTypes.pickerTypes(
@@ -429,9 +430,10 @@ struct MeetingTranscriberApp: App {
     }
 
     private func openProtocolsFolder() {
-        let protocols = appState.settings.effectiveOutputDir
-        let accessing = protocols.startAccessingSecurityScopedResource()
-        defer { if accessing { protocols.stopAccessingSecurityScopedResource() } }
+        let outputDirectory = appState.settings.effectiveOutputDir
+        let accessing = outputDirectory.startAccessingSecurityScopedResource()
+        defer { if accessing { outputDirectory.stopAccessingSecurityScopedResource() } }
+        let protocols = outputDirectory.appendingPathComponent("protocols", isDirectory: true)
         try? FileManager.default.createDirectory(at: protocols, withIntermediateDirectories: true)
         NSWorkspace.shared.open(protocols)
     }

@@ -121,6 +121,14 @@ struct SpeakerNamingView: View { // swiftlint:disable:this type_body_length
         Self.computeSpeakers(from: data)
     }
 
+    private var automaticallyNamedSpeakers: [(label: String, autoName: String?, speakingTime: Double)] {
+        speakers.filter { $0.autoName != nil }
+    }
+
+    private var unidentifiedSpeakers: [(label: String, autoName: String?, speakingTime: Double)] {
+        speakers.filter { $0.autoName == nil }
+    }
+
     /// Re-run controls: mode picker, speaker-count Stepper, and Re-run button.
     /// Stepper range narrows in Sortformer mode (1...4); mode-flip clamps
     /// `rerunCount` to the new range. Re-run posts `.rerunWithMode(mode, count)`
@@ -210,18 +218,44 @@ struct SpeakerNamingView: View { // swiftlint:disable:this type_body_length
     var body: some View {
         // swiftlint:disable:next closure_body_length
         VStack(spacing: 16) {
-            Text("Name Speakers — \"\(data.meetingTitle)\"")
+            Text("Speaker Matches — \"\(data.meetingTitle)\"")
                 .font(.headline)
                 .padding(.top, 8)
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    ForEach(speakers, id: \.label) { speaker in
-                        speakerRow(speaker: speaker)
+            if !automaticallyNamedSpeakers.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Matched automatically")
+                        .font(.subheadline.weight(.medium))
+                    ForEach(automaticallyNamedSpeakers, id: \.label) { speaker in
+                        Label("\(speaker.label) — \(speaker.autoName ?? "")", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: min(CGFloat(speakers.count) * 120, 500))
+
+            if unidentifiedSpeakers.isEmpty {
+                ContentUnavailableView(
+                    "All Speakers Matched",
+                    systemImage: "person.crop.circle.badge.checkmark",
+                    description: Text("Sawti found a reliable name for every speaker."),
+                )
+                .frame(maxWidth: .infinity, minHeight: 90)
+            } else {
+                Text("Name the remaining speakers")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ForEach(unidentifiedSpeakers, id: \.label) { speaker in
+                            speakerRow(speaker: speaker)
+                        }
+                    }
+                }
+                .frame(height: min(CGFloat(unidentifiedSpeakers.count) * 120, 500))
+            }
 
             Divider()
 
@@ -600,7 +634,10 @@ struct SpeakerNamingView: View { // swiftlint:disable:this type_body_length
 
     private func confirm() {
         player?.stop()
-        let mapping = Self.buildSpeakerMapping(speakers: speakers, names: rows.names)
+        // Only send editable unresolved rows back to the session. Its saved
+        // automatic mapping remains the fallback for every already matched
+        // speaker, so confirming one manual name cannot overwrite those matches.
+        let mapping = Self.buildSpeakerMapping(speakers: unidentifiedSpeakers, names: rows.names)
         onComplete(.confirmed(mapping))
     }
 

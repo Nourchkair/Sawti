@@ -23,11 +23,10 @@ struct MenuBarView: View {
     let onOpenLastProtocol: () -> Void
     let onOpenProtocol: (URL) -> Void
     var onViewTranscript: ((URL) -> Void)? = nil
-    var onOpenRecordings: (() -> Void)? = nil
     let onOpenProtocolsFolder: () -> Void
     let onOpenSettings: () -> Void
     let onNameSpeakers: (() -> Void)?
-    let onProcessFiles: () -> Void
+    let onOpenLibrary: () -> Void
     let onDismissJob: (UUID) -> Void
     let onQuit: () -> Void
 
@@ -183,9 +182,9 @@ struct MenuBarView: View {
         }
 
         Button {
-            onProcessFiles()
+            onOpenLibrary()
         } label: {
-            Label("Process Audio/Video Files...", systemImage: "doc.badge.plus")
+            Label("Library…", systemImage: "waveform")
         }
         .keyboardShortcut("p")
     }
@@ -204,14 +203,6 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder private var protocolActions: some View {
-        if let onOpenRecordings {
-            Button {
-                onOpenRecordings()
-            } label: {
-                Label("Recordings...", systemImage: "waveform")
-            }
-        }
-
         if let protocolPath = status?.protocolPath {
             Button {
                 onOpenLastProtocol()

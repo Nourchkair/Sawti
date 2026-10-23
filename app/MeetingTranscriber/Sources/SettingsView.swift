@@ -29,29 +29,83 @@ struct SettingsView: View {
     @State private var selection: SettingsTab = .general
 
     var body: some View {
-        splitView
-    }
-
-    private var splitView: some View {
-        NavigationSplitView {
-            List(SettingsTab.allCases, selection: $selection) { tab in
-                Label(tab.label, systemImage: tab.systemImage)
-                    .tag(tab)
-                    .accessibilityIdentifier(A11yID.settingsTab(tab.rawValue))
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
-        } detail: {
+        VStack(spacing: 0) {
+            settingsHeader
+            Divider()
             detailView(for: selection)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle("Settings")
         .frame(
             minWidth: 760,
-            idealWidth: 860,
-            maxWidth: 1000,
+            idealWidth: 900,
+            maxWidth: 1120,
             minHeight: 520,
             idealHeight: 640,
             maxHeight: .infinity,
         )
+    }
+
+    private var settingsHeader: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 9) {
+                Image("SawtiLogo", bundle: .main)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(.primary)
+                    .frame(width: 26, height: 26)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Sawti")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Settings")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 112, alignment: .leading)
+
+            Divider()
+                .frame(height: 42)
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 4) {
+                    ForEach(SettingsTab.allCases) { tab in
+                        Button {
+                            selection = tab
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: tab.systemImage)
+                                    .font(.system(size: 17, weight: .regular))
+                                Text(tab.label)
+                                    .font(.system(size: 11, weight: selection == tab ? .semibold : .regular))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .foregroundStyle(selection == tab ? Color.accentColor : Color.secondary)
+                            .frame(minWidth: 78, maxWidth: 106, minHeight: 54)
+                            .background {
+                                if selection == tab {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.accentColor.opacity(0.13))
+                                }
+                            }
+                            .contentShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier(A11yID.settingsTab(tab.rawValue))
+                        .accessibilityLabel(tab.label)
+                        .accessibilityAddTraits(selection == tab ? .isSelected : [])
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.regularMaterial)
     }
 
     @ViewBuilder

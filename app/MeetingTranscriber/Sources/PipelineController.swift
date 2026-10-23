@@ -419,10 +419,20 @@ final class PipelineController {
                 fromDirectory: group.directory,
                 basename: group.stem,
             )
-            let title = sidecar?.title ?? group.stem
-            let appName = sidecar?.appName ?? "File"
+            let libraryMetadata = RecordingLibraryMetadata.read(
+                fromDirectory: group.directory,
+                basename: group.stem,
+            )
+            let title = sidecar?.title ?? libraryMetadata?.title ?? group.stem
+            let appName = sidecar?.appName ?? libraryMetadata?.appName ?? "File"
             let micDelay = sidecar?.micDelaySeconds ?? 0
-            let participants = sidecar?.participants ?? []
+            let participants = sidecar?.participants ?? libraryMetadata?.participants ?? []
+            let recordingSource: RecordingSourceKind
+            if let sidecar {
+                recordingSource = .captured(trigger: sidecar.trigger, appName: sidecar.appName)
+            } else {
+                recordingSource = libraryMetadata?.recordingSource ?? .inferred(appName: appName)
+            }
 
             // For paired groups: pass `group.mix` directly (nil when only app+mic
             // were selected — the pipeline mixes app+mic into the workdir cache
@@ -432,10 +442,12 @@ final class PipelineController {
                 meetingTitle: title, appName: appName,
                 mixPath: group.mix, appPath: group.app, micPath: group.mic,
                 micDelay: micDelay, participants: participants,
+                recordingSource: recordingSource,
+                activeSpeakerIntervals: sidecar?.activeSpeakerIntervals,
                 // Record-only fleet flow: a separate host reprocesses recordings
                 // captured elsewhere. Anchor the output basename on the sidecar's
                 // real meeting-start time, not this reprocessing moment.
-                meetingStartTime: sidecar?.startedAt,
+                meetingStartTime: sidecar?.startedAt ?? libraryMetadata?.recordedAt,
                 autoSkipNaming: autoSkipNaming,
             )
             ids.append(job.id)
@@ -444,13 +456,22 @@ final class PipelineController {
 
         for url in resolution.singletons {
             let title = url.deletingPathExtension().lastPathComponent
+            let stem = url.deletingPathExtension().lastPathComponent
+            let metadataStem = stem.hasSuffix("_16k") ? String(stem.dropLast(4)) : stem
+            let libraryMetadata = RecordingLibraryMetadata.read(
+                fromDirectory: url.deletingLastPathComponent(),
+                basename: metadataStem,
+            )
             let job = PipelineJob(
-                meetingTitle: title,
-                appName: "File",
+                meetingTitle: libraryMetadata?.title ?? title,
+                appName: libraryMetadata?.appName ?? "File",
                 mixPath: url,
                 appPath: nil,
                 micPath: nil,
                 micDelay: 0,
+                participants: libraryMetadata?.participants ?? [],
+                recordingSource: libraryMetadata?.recordingSource ?? .imported,
+                meetingStartTime: libraryMetadata?.recordedAt,
                 autoSkipNaming: autoSkipNaming,
             )
             ids.append(job.id)

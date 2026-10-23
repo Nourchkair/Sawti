@@ -15,6 +15,7 @@ extension WatchLoop {
         recording: RecordingResult,
         trigger: RecordingSidecar.Trigger,
         participants: [String],
+        activeSpeakerIntervals: [ActiveSpeakerInterval]? = nil,
         bookmarks: [RecordingBookmark] = [],
     ) throws {
         let startedAt = recording.recordingStartDate
@@ -56,6 +57,7 @@ extension WatchLoop {
             mixFilename: movedMix.lastPathComponent,
             appFilename: movedApp?.lastPathComponent,
             micFilename: movedMic?.lastPathComponent,
+            activeSpeakerIntervals: activeSpeakerIntervals,
         )
         try sidecar.write(toDirectory: destDir, basename: basename)
         do {

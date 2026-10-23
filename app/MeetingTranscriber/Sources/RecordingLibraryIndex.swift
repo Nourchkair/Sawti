@@ -2,6 +2,50 @@
 /// a searchable recording history after the short-lived processing job expires.
 import Foundation
 
+enum RecordingSourceKind: String, Codable, CaseIterable, Identifiable, Sendable {
+    case meeting
+    case microphone
+    case app
+    case imported
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .meeting: "Meeting"
+        case .microphone: "Microphone"
+        case .app: "App recording"
+        case .imported: "Imported file"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .meeting: "person.3"
+        case .microphone: "mic"
+        case .app: "app"
+        case .imported: "square.and.arrow.down"
+        }
+    }
+
+    static func inferred(appName: String?) -> Self {
+        switch appName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "microphone": .microphone
+        case "file", "import", "imported": .imported
+        default: .meeting
+        }
+    }
+
+    static func captured(trigger: RecordingSidecar.Trigger?, appName: String?) -> Self {
+        if inferred(appName: appName) == .microphone { return .microphone }
+        return switch trigger {
+        case .auto: .meeting
+        case .manual: .app
+        case nil: inferred(appName: appName)
+        }
+    }
+}
+
 /// Private descriptive metadata kept beside Sawti's processed audio. The
 /// recording library can still rebuild its index from the files if a sidecar
 /// is missing or unreadable.
@@ -14,15 +58,51 @@ struct RecordingLibraryMetadata: Codable, Sendable {
     let appName: String
     let recordedAt: Date
     let participants: [String]
-    let course: String?
+    let category: String?
+    let recordingSource: RecordingSourceKind?
 
-    init(title: String, appName: String, recordedAt: Date, participants: [String], course: String? = nil) {
+    private enum CodingKeys: String, CodingKey {
+        case version, title, appName, recordedAt, participants, category, course, recordingSource
+    }
+
+    init(
+        title: String,
+        appName: String,
+        recordedAt: Date,
+        participants: [String],
+        category: String? = nil,
+        recordingSource: RecordingSourceKind? = nil,
+    ) {
         version = Self.currentVersion
         self.title = title
         self.appName = appName
         self.recordedAt = recordedAt
         self.participants = participants
-        self.course = course
+        self.category = category
+        self.recordingSource = recordingSource
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        title = try container.decode(String.self, forKey: .title)
+        appName = try container.decode(String.self, forKey: .appName)
+        recordedAt = try container.decode(Date.self, forKey: .recordedAt)
+        participants = try container.decode([String].self, forKey: .participants)
+        category = try container.decodeIfPresent(String.self, forKey: .category)
+            ?? container.decodeIfPresent(String.self, forKey: .course)
+        recordingSource = try container.decodeIfPresent(RecordingSourceKind.self, forKey: .recordingSource)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(title, forKey: .title)
+        try container.encode(appName, forKey: .appName)
+        try container.encode(recordedAt, forKey: .recordedAt)
+        try container.encode(participants, forKey: .participants)
+        try container.encodeIfPresent(category, forKey: .category)
+        try container.encodeIfPresent(recordingSource, forKey: .recordingSource)
     }
 
     func write(toDirectory directory: URL, basename: String) throws {
@@ -54,7 +134,8 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
     let recordedAt: Date
     let appName: String?
     let participants: [String]
-    let course: String?
+    let category: String?
+    let recordingSource: RecordingSourceKind
     let bookmarks: [RecordingBookmark]
     let transcriptURL: URL?
     let originalTranscriptURL: URL?
@@ -71,6 +152,32 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
         return "Recording only"
     }
 
+    /// Prefer the original paired tracks when they still exist. A recording
+    /// saved in record-only mode can then be transcribed with the same
+    /// app/microphone separation as its first live run.
+    func transcriptionURLs(outputDirectory: URL) -> [URL] {
+        let directory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
+        let fileManager = FileManager.default
+        func existing(_ filename: String?) -> URL? {
+            guard let filename else { return nil }
+            let url = directory.appendingPathComponent(filename)
+            return fileManager.fileExists(atPath: url.path) ? url : nil
+        }
+
+        if let sidecar = RecordingSidecar.read(fromDirectory: directory, basename: id) {
+            let sourceURLs = [sidecar.files.mix, sidecar.files.app, sidecar.files.mic].compactMap(existing)
+            if !sourceURLs.isEmpty { return sourceURLs }
+        }
+
+        let mix = existing("\(id)\(RecordingFileSuffix.mix)")
+        let app = existing("\(id)\(RecordingFileSuffix.app)")
+        let mic = existing("\(id)\(RecordingFileSuffix.mic)")
+        if let mix { return [mix] + [app, mic].compactMap(\.self) }
+        if app != nil, mic != nil { return [app, mic].compactMap(\.self) }
+        if let convertedMix = existing("\(id)_16k.wav") { return [convertedMix] }
+        return audioURL.flatMap { fileManager.fileExists(atPath: $0.path) ? [$0] : nil } ?? []
+    }
+
     func reflecting(_ job: PipelineJob) -> Self {
         Self(
             id: id,
@@ -78,7 +185,8 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
             recordedAt: recordedAt,
             appName: appName,
             participants: participants,
-            course: course,
+            category: category,
+            recordingSource: recordingSource,
             bookmarks: bookmarks,
             transcriptURL: job.transcriptPath ?? transcriptURL,
             originalTranscriptURL: originalTranscriptURL,
@@ -96,7 +204,8 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
             recordedAt: job.artifactStartTime,
             appName: job.appName,
             participants: job.participants,
-            course: nil,
+            category: nil,
+            recordingSource: job.recordingSource ?? .inferred(appName: job.appName),
             bookmarks: job.bookmarks ?? [],
             transcriptURL: job.transcriptPath,
             originalTranscriptURL: job.rawTranscriptPath,
@@ -117,7 +226,8 @@ enum RecordingLibraryIndex {
         var recordedAt: Date
         var appName: String?
         var participants: [String] = []
-        var course: String?
+        var category: String?
+        var recordingSource: RecordingSourceKind = .imported
         var bookmarks: [RecordingBookmark] = []
         var transcriptURL: URL?
         var originalTranscriptURL: URL?
@@ -131,7 +241,8 @@ enum RecordingLibraryIndex {
                 recordedAt: recordedAt,
                 appName: appName,
                 participants: participants,
-                course: course,
+                category: category,
+                recordingSource: recordingSource,
                 bookmarks: bookmarks,
                 transcriptURL: transcriptURL,
                 originalTranscriptURL: originalTranscriptURL,
@@ -198,7 +309,8 @@ enum RecordingLibraryIndex {
                 entry.appName = metadata.appName
                 entry.recordedAt = metadata.recordedAt
                 entry.participants = metadata.participants
-                entry.course = metadata.course
+                entry.category = metadata.category
+                entry.recordingSource = metadata.recordingSource ?? .inferred(appName: metadata.appName)
                 builders[id] = entry
             } else if name.hasSuffix(RecordingBookmarksStore.filenameSuffix) {
                 let id = String(name.dropLast(RecordingBookmarksStore.filenameSuffix.count))
@@ -214,6 +326,10 @@ enum RecordingLibraryIndex {
                 entry.appName = metadata.appName
                 entry.recordedAt = metadata.startedAt
                 entry.participants = metadata.participants
+                entry.recordingSource = RecordingSourceKind.captured(
+                    trigger: metadata.trigger,
+                    appName: metadata.appName,
+                )
                 entry.audioURL = recordingsDirectory.appendingPathComponent(metadata.files.mix)
                 builders[id] = entry
             } else if let (id, audioURL) = audioFile(file) {
@@ -237,17 +353,18 @@ enum RecordingLibraryIndex {
             }
     }
 
-    static func updateCourse(for item: RecordingLibraryItem, course: String, outputDirectory: URL) throws {
+    static func updateCategory(for item: RecordingLibraryItem, category: String, outputDirectory: URL) throws {
         let openedScope = outputDirectory.startAccessingSecurityScopedResource()
         defer { if openedScope { outputDirectory.stopAccessingSecurityScopedResource() } }
         let recordingsDirectory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
-        let trimmedCourse = course.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCategory = category.trimmingCharacters(in: .whitespacesAndNewlines)
         try RecordingLibraryMetadata(
             title: item.title,
             appName: item.appName ?? "Unknown",
             recordedAt: item.recordedAt,
             participants: item.participants,
-            course: trimmedCourse.isEmpty ? nil : trimmedCourse,
+            category: trimmedCategory.isEmpty ? nil : trimmedCategory,
+            recordingSource: item.recordingSource,
         ).write(toDirectory: recordingsDirectory, basename: item.id)
     }
 

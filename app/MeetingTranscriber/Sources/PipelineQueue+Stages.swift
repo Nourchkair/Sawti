@@ -25,6 +25,7 @@ extension PipelineQueue {
         let micPath: URL?
         let micDelay: TimeInterval
         let participants: [String]
+        let recordingSource: RecordingSourceKind?
         let activeSpeakerIntervals: [ActiveSpeakerInterval]?
         let bookmarks: [RecordingBookmark]
         /// Persisted-file basename, computed once from title + jobID + the
@@ -125,6 +126,7 @@ extension PipelineQueue {
             micPath: job.micPath,
             micDelay: job.micDelay,
             participants: job.participants,
+            recordingSource: job.recordingSource,
             activeSpeakerIntervals: job.activeSpeakerIntervals,
             bookmarks: job.bookmarks ?? [],
             // Anchor the basename on the meeting start; reimport/orphan jobs
@@ -891,13 +893,14 @@ extension PipelineQueue {
         )
 
         do {
-            let existingCourse = RecordingLibraryMetadata.read(fromDirectory: recordingsDir, basename: ctx.slug)?.course
+            let existingCategory = RecordingLibraryMetadata.read(fromDirectory: recordingsDir, basename: ctx.slug)?.category
             try RecordingLibraryMetadata(
                 title: ctx.title,
                 appName: ctx.appName,
                 recordedAt: ctx.recordedAt,
                 participants: ctx.participants,
-                course: existingCourse,
+                category: existingCategory,
+                recordingSource: ctx.recordingSource ?? .inferred(appName: ctx.appName),
             ).write(toDirectory: recordingsDir, basename: ctx.slug)
         } catch {
             logger.warning(
