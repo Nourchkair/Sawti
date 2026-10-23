@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if !APPSTORE
+import Sparkle
+#endif
 
 // MARK: - Models
 
@@ -28,7 +31,7 @@ struct GitHubReleaseProvider: UpdateProviding {
     /// Not `private` — `AboutSettingsView`'s GitHub link is built from the same
     /// two constants, so the repo identity has a single home.
     static let owner = "Nourchkair"
-    static let repo = "meeting-transcriber"
+    static let repo = "Sawti"
 
     private struct GitHubRelease: Codable {
         let tagName: String
@@ -117,12 +120,53 @@ final class UpdateChecker {
     private let currentVersion: (Int, Int, Int)
     private var checkTask: Task<Void, Never>?
     private var periodicTask: Task<Void, Never>?
+#if !APPSTORE
+    private let updaterController: SPUStandardUpdaterController?
+#endif
 
     init(provider: any UpdateProviding = GitHubReleaseProvider()) {
         self.provider = provider
         let version =
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
         self.currentVersion = Self.parseVersion(version) ?? (0, 0, 0)
+#if !APPSTORE
+        let info = Bundle.main.infoDictionary ?? [:]
+        if (info["SUFeedURL"] as? String)?.isEmpty == false,
+           (info["SUPublicEDKey"] as? String)?.isEmpty == false {
+            self.updaterController = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: nil,
+                userDriverDelegate: nil,
+            )
+        } else {
+            // Developer builds have no appcast or update-signing key. Keep the
+            // release updater disabled rather than pointing a local build at a
+            // feed it cannot safely install from.
+            self.updaterController = nil
+        }
+#endif
+    }
+
+    var canInstallUpdates: Bool {
+#if APPSTORE
+        false
+#else
+        updaterController != nil
+#endif
+    }
+
+    /// Opens Sparkle's native download, install, and relaunch flow. This is
+    /// used by both the settings button and the menu-bar update notification.
+    func installAvailableUpdate() {
+#if !APPSTORE
+        updaterController?.checkForUpdates(nil)
+#endif
+    }
+
+    func setAutomaticChecksEnabled(_ enabled: Bool) {
+#if !APPSTORE
+        updaterController?.updater.automaticallyChecksForUpdates = enabled
+#endif
     }
 
     func checkNow(includePreReleases: Bool = false) {
@@ -164,6 +208,7 @@ final class UpdateChecker {
 
     func startPeriodicChecks(settings: AppSettings) {
         periodicTask?.cancel()
+        setAutomaticChecksEnabled(settings.checkForUpdates)
 
         periodicTask = Task {
             // Initial delay

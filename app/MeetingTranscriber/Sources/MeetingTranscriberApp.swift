@@ -156,7 +156,6 @@ struct MeetingTranscriberApp: App {
                 openWindow(id: "transcript", value: url)
                 NSApp.activate(ignoringOtherApps: true)
             },
-            onOpenProtocolsFolder: openProtocolsFolder,
             onOpenSettings: {
                 bringWindowToFront(id: "settings")
             },
@@ -265,6 +264,7 @@ struct MeetingTranscriberApp: App {
                 parakeetEngine: appState.engines.parakeetEngine,
                 updateChecker: appState.updateChecker,
                 notificationVisibility: appState.permissions.notificationVisibility,
+                onWatchDurationChanged: { appState.watching.watchSessionDurationDidChange() },
                 // Share the pipeline's actor instance so both writers serialise on
                 // the same `recognition_log.jsonl` file. Fallback only fires in the
                 // test-only PipelineQueue init that intentionally leaves it nil.
@@ -321,8 +321,11 @@ struct MeetingTranscriberApp: App {
                     openWindow(id: "transcript", value: url)
                     NSApp.activate(ignoringOtherApps: true)
                 },
+                onOpenProtocolsFolder: openProtocolsFolder,
                 onImportMedia: importAudioVideoFiles,
-                onTranscribe: { urls in appState.pipeline.enqueueFiles(urls) },
+                onTranscribe: { recordingID, urls in
+                    appState.pipeline.enqueueFiles(urls, libraryRecordingID: recordingID)
+                },
             )
         }
         .defaultSize(width: 1120, height: 760)

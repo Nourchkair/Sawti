@@ -23,7 +23,6 @@ struct MenuBarView: View {
     let onOpenLastProtocol: () -> Void
     let onOpenProtocol: (URL) -> Void
     var onViewTranscript: ((URL) -> Void)? = nil
-    let onOpenProtocolsFolder: () -> Void
     let onOpenSettings: () -> Void
     let onNameSpeakers: (() -> Void)?
     let onOpenLibrary: () -> Void
@@ -66,12 +65,13 @@ struct MenuBarView: View {
         watchControls
         processingQueue
 
-        Divider()
-
-        protocolActions
-        updateSection
-
-        Divider()
+        if status?.protocolPath != nil
+            || (updateChecker?.availableUpdate != nil && updateChecker?.canInstallUpdates == true) {
+            Divider()
+            protocolActions
+            updateSection
+            Divider()
+        }
 
         settingsButton
 
@@ -184,9 +184,10 @@ struct MenuBarView: View {
         Button {
             onOpenLibrary()
         } label: {
-            Label("Library…", systemImage: "waveform")
+            Label("Library", systemImage: "waveform")
         }
         .keyboardShortcut("p")
+        .help("Open your recordings, transcripts, and workspaces")
     }
 
     @ViewBuilder private var processingQueue: some View {
@@ -212,22 +213,15 @@ struct MenuBarView: View {
             .keyboardShortcut("o")
             .disabled(protocolPath.isEmpty)
         }
-
-        Button {
-            onOpenProtocolsFolder()
-        } label: {
-            Label("Open Protocols Folder", systemImage: "folder")
-        }
     }
 
     @ViewBuilder private var updateSection: some View {
-        if let update = updateChecker?.availableUpdate {
-            Divider()
+        if let update = updateChecker?.availableUpdate, updateChecker?.canInstallUpdates == true {
             Button {
-                NSWorkspace.shared.open(update.dmgURL ?? update.htmlURL)
+                updateChecker?.installAvailableUpdate()
             } label: {
                 Label(
-                    "Update Available: \(update.tagName)",
+                    "Install Update & Restart: \(update.tagName)",
                     systemImage: "arrow.down.circle.fill",
                 )
             }

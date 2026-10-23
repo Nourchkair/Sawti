@@ -19,6 +19,8 @@ protocol WhisperDecodingClient: AnyObject {
         _ samples: [Float],
         decodeOptions: DecodingOptions,
     ) async throws -> [TranscriptionResult]
+
+    func detectLanguage(audioArray: [Float]) async throws -> (language: String, langProbs: [String: Float])
 }
 
 extension WhisperKit: WhisperDecodingClient {
@@ -35,6 +37,10 @@ extension WhisperKit: WhisperDecodingClient {
         decodeOptions: DecodingOptions,
     ) async throws -> [TranscriptionResult] {
         try await transcribe(audioArray: samples, decodeOptions: decodeOptions)
+    }
+
+    func detectLanguage(audioArray: [Float]) async throws -> (language: String, langProbs: [String: Float]) {
+        try await detectLangauge(audioArray: audioArray)
     }
 }
 

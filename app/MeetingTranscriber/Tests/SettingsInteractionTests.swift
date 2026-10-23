@@ -63,7 +63,7 @@ final class SettingsInteractionTests: XCTestCase {
         let view = OutputSettingsView(settings: settings)
 
         let picker = try view.inspect().find(ViewType.Picker.self) { picker in
-            try picker.labelView().text().string() == "LLM Provider"
+            try picker.labelView().text().string() == "AI service"
         }
         try picker.select(value: ProtocolProvider.openAICompatible)
 

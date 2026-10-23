@@ -99,6 +99,36 @@ enum ProtocolProvider: String, CaseIterable {
     }
 }
 
+enum WatchSessionDuration: String, CaseIterable, Identifiable {
+    case never
+    case oneHour
+    case twoHours
+    case fourHours
+    case eightHours
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .never: "Never"
+        case .oneHour: "1 hour"
+        case .twoHours: "2 hours"
+        case .fourHours: "4 hours"
+        case .eightHours: "8 hours"
+        }
+    }
+
+    var seconds: Int? {
+        switch self {
+        case .never: nil
+        case .oneHour: 60 * 60
+        case .twoHours: 2 * 60 * 60
+        case .fourHours: 4 * 60 * 60
+        case .eightHours: 8 * 60 * 60
+        }
+    }
+}
+
 @Observable
 final class AppSettings {
     /// Backing store. Production callers pass nothing → `.standard`. Tests
@@ -176,6 +206,12 @@ final class AppSettings {
     /// Auto-start watching on app launch.
     var autoWatch: Bool {
         didSet { defaults.set(autoWatch, forKey: "autoWatch") }
+    }
+
+    /// Stop meeting detection after this much time. A recording already in
+    /// progress is allowed to finish before watching stops.
+    var watchSessionDuration: WatchSessionDuration {
+        didSet { defaults.set(watchSessionDuration.rawValue, forKey: "watchSessionDuration") }
     }
 
     // MARK: - Recording
@@ -286,6 +322,23 @@ final class AppSettings {
     /// Whisper transcription language. Empty string = auto-detect (maps to nil on WhisperKitEngine).
     var whisperLanguage: String {
         didSet { defaults.set(whisperLanguage, forKey: "whisperLanguage") }
+    }
+
+    /// When enabled, WhisperKit's per-window language choice is restricted to
+    /// the selected primary/additional language set. Disabled preserves the
+    /// existing auto-detect or single-language behavior.
+    var whisperLanguageAllowlistEnabled: Bool {
+        didSet { defaults.set(whisperLanguageAllowlistEnabled, forKey: "whisperLanguageAllowlistEnabled") }
+    }
+
+    /// The primary language used when language detection is uncertain.
+    var whisperPrimaryLanguage: String {
+        didSet { defaults.set(whisperPrimaryLanguage, forKey: "whisperPrimaryLanguage") }
+    }
+
+    /// Other languages WhisperKit is allowed to select for an audio window.
+    var whisperAdditionalLanguages: [String] {
+        didSet { defaults.set(whisperAdditionalLanguages, forKey: "whisperAdditionalLanguages") }
     }
 
     /// Parakeet language hint (ISO 639-1 code). Empty string = auto-detect.
@@ -501,7 +554,7 @@ final class AppSettings {
 
     #if !APPSTORE
         /// API key for the Claude CLI protocol generator, entered by the user
-        /// in Settings → Protocol Generation. Empty means use the CLI's own
+        /// in Settings → Files & Notes → Meeting Notes. Empty means use the CLI's own
         /// `claude login` session; this is never populated automatically.
         var claudeAPIKey: String {
             get { KeychainHelper.read(key: claudeAPIKeyAccount) ?? "" }
@@ -584,6 +637,8 @@ final class AppSettings {
         watchWhatsApp = defaults.object(forKey: "watchWhatsApp") as? Bool ?? false
         watchCustomApps = defaults.stringArray(forKey: "watchCustomApps") ?? []
         autoWatch = defaults.object(forKey: "autoWatch") as? Bool ?? false
+        watchSessionDuration = defaults.string(forKey: "watchSessionDuration")
+            .flatMap(WatchSessionDuration.init(rawValue:)) ?? .never
 
         pollInterval = defaults.object(forKey: "pollInterval") as? Double ?? 3.0
         endGrace = defaults.object(forKey: "endGrace") as? Double ?? 15.0
@@ -605,7 +660,12 @@ final class AppSettings {
             ?? "openai_whisper-large-v3-v20240930_turbo"
         // Auto-detect is a safer default for Sawti's multilingual use than the
         // upstream German-only default. A user can still pin a language.
-        whisperLanguage = defaults.object(forKey: "whisperLanguage") as? String ?? ""
+        let savedWhisperLanguage = defaults.string(forKey: "whisperLanguage") ?? ""
+        whisperLanguage = savedWhisperLanguage
+        whisperLanguageAllowlistEnabled = defaults.object(forKey: "whisperLanguageAllowlistEnabled") as? Bool ?? false
+        whisperPrimaryLanguage = defaults.string(forKey: "whisperPrimaryLanguage")
+            ?? (savedWhisperLanguage.isEmpty ? "en" : savedWhisperLanguage)
+        whisperAdditionalLanguages = defaults.stringArray(forKey: "whisperAdditionalLanguages") ?? ["fr", "ar"]
         parakeetLanguage = defaults.object(forKey: "parakeetLanguage") as? String ?? ""
         customVocabularyPath = defaults.string(forKey: "customVocabularyPath") ?? ""
         customVocabularyBookmark = defaults.data(forKey: "customVocabularyBookmark")
@@ -665,9 +725,9 @@ final class AppSettings {
         #if !APPSTORE
             debugRPCEnabled = defaults.object(forKey: "debugRPCEnabled") as? Bool ?? false
         #endif
-        // Alpha runs without update checks by default so its core can be
-        // exercised offline and does not make an unsolicited network request.
-        checkForUpdates = defaults.object(forKey: "checkForUpdates") as? Bool ?? false
+        // New installs check for updates automatically. Users who explicitly
+        // turned checks off keep that preference across upgrades.
+        checkForUpdates = defaults.object(forKey: "checkForUpdates") as? Bool ?? true
         includePreReleases = defaults.object(forKey: "includePreReleases") as? Bool ?? false
         refreshCustomVocabularyValidation()
     }

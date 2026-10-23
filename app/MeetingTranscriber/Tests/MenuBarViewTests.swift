@@ -53,7 +53,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: onStopManualRecording,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: onNameSpeakers,
             onOpenLibrary: {},
@@ -156,12 +155,6 @@ final class MenuBarViewTests: XCTestCase {
         XCTAssertNoThrow(try body.find(text: "Settings..."))
     }
 
-    func testOpenProtocolsFolderButtonExists() throws {
-        let sut = makeView(status: makeStatus())
-        let body = try sut.inspect()
-        XCTAssertNoThrow(try body.find(text: "Open Protocols Folder"))
-    }
-
     func testQuitButtonExists() throws {
         let sut = makeView(status: makeStatus())
         let body = try sut.inspect()
@@ -239,7 +232,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -266,7 +258,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -293,7 +284,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: { called = true },
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -302,33 +292,6 @@ final class MenuBarViewTests: XCTestCase {
         )
         let body = try sut.inspect()
         try body.find(button: "Settings...").tap()
-        XCTAssertTrue(called)
-    }
-
-    func testProtocolsFolderButtonCallsCallback() throws {
-        var called = false
-        let sut = MenuBarView(
-            status: makeStatus(state: .idle),
-            isWatching: false,
-            pipelineQueue: makeIsolatedPipelineQueue(),
-            updateChecker: nil,
-            onStartStop: {},
-            onRecordApp: {},
-            onRecordMicrophone: {},
-            noMic: false,
-            manualRecordingPendingOrActive: false,
-            onStopManualRecording: nil,
-            onOpenLastProtocol: {},
-            onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: { called = true },
-            onOpenSettings: {},
-            onNameSpeakers: nil,
-            onOpenLibrary: {},
-            onDismissJob: { _ in },
-            onQuit: {},
-        )
-        let body = try sut.inspect()
-        try body.find(button: "Open Protocols Folder").tap()
         XCTAssertTrue(called)
     }
 
@@ -347,7 +310,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: { called = true },
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -374,7 +336,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: { called = true },
             onOpenLibrary: {},
@@ -437,7 +398,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -476,7 +436,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -502,7 +461,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: { called = true },
@@ -510,7 +468,7 @@ final class MenuBarViewTests: XCTestCase {
             onQuit: {},
         )
         let body = try sut.inspect()
-        try body.find(button: "Library…").tap()
+        try body.find(button: "Library").tap()
         XCTAssertTrue(called)
     }
 
@@ -541,7 +499,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -579,7 +536,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -666,7 +622,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -706,7 +661,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -748,7 +702,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: { called = true },
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -796,7 +749,7 @@ final class MenuBarViewTests: XCTestCase {
     func testProcessFilesButtonAlwaysExists() throws {
         let sut = makeView(status: makeStatus(state: .idle))
         let body = try sut.inspect()
-        XCTAssertNoThrow(try body.find(text: "Library…"))
+        XCTAssertNoThrow(try body.find(text: "Library"))
     }
 
     // MARK: - Error job display
@@ -825,7 +778,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},
@@ -988,7 +940,6 @@ final class MenuBarViewTests: XCTestCase {
             onStopManualRecording: nil,
             onOpenLastProtocol: {},
             onOpenProtocol: { _ in },
-            onOpenProtocolsFolder: {},
             onOpenSettings: {},
             onNameSpeakers: nil,
             onOpenLibrary: {},

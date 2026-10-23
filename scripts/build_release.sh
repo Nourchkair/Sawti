@@ -83,11 +83,20 @@ SPM_DIR="$PROJECT_ROOT/app/MeetingTranscriber"
 SWIFT_BUILD_FLAGS=(-c release --disable-sandbox)
 if [ "$APPSTORE" = true ]; then
     SWIFT_BUILD_FLAGS+=(-Xswiftc -DAPPSTORE)
+    (cd "$SPM_DIR" && SAWTI_APPSTORE_BUILD=1 swift build "${SWIFT_BUILD_FLAGS[@]}" --product MeetingTranscriber)
+    (cd "$SPM_DIR" && SAWTI_APPSTORE_BUILD=1 swift build "${SWIFT_BUILD_FLAGS[@]}" --product SawtiCaptureHelper)
+else
+    (cd "$SPM_DIR" && swift build "${SWIFT_BUILD_FLAGS[@]}" --product MeetingTranscriber)
+    (cd "$SPM_DIR" && swift build "${SWIFT_BUILD_FLAGS[@]}" --product SawtiCaptureHelper)
 fi
-(cd "$SPM_DIR" && swift build "${SWIFT_BUILD_FLAGS[@]}" --product MeetingTranscriber)
-(cd "$SPM_DIR" && swift build "${SWIFT_BUILD_FLAGS[@]}" --product SawtiCaptureHelper)
 
 cp "$SPM_DIR/.build/release/MeetingTranscriber" "$MACOS_DIR/MeetingTranscriber"
+# SwiftPM links Sparkle through @rpath. The app bundle keeps the framework in
+# Contents/Frameworks, one level above the executable's directory, so add that
+# standard app-bundle search path before signing the executable.
+if [ "$APPSTORE" = false ]; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/MeetingTranscriber"
+fi
 HELPER_BUILD_BINARY="$SPM_DIR/.build/release/SawtiCaptureHelper"
 if [ ! -x "$HELPER_BUILD_BINARY" ]; then
     echo "ERROR: SwiftPM did not build SawtiCaptureHelper" >&2
@@ -95,6 +104,16 @@ if [ ! -x "$HELPER_BUILD_BINARY" ]; then
 fi
 mkdir -p "$CONTENTS/Helpers"
 cp "$HELPER_BUILD_BINARY" "$CONTENTS/Helpers/SawtiCaptureHelper"
+
+if [ "$APPSTORE" = false ]; then
+    SPARKLE_FRAMEWORK="$SPM_DIR/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+    if [ ! -d "$SPARKLE_FRAMEWORK" ]; then
+        echo "ERROR: Sparkle.framework was not resolved by SwiftPM" >&2
+        exit 1
+    fi
+    mkdir -p "$CONTENTS/Frameworks"
+    ditto "$SPARKLE_FRAMEWORK" "$CONTENTS/Frameworks/Sparkle.framework"
+fi
 
 # ── Step 2: Assemble app bundle ──────────────────────────────────────────────
 
@@ -104,6 +123,25 @@ echo "Step 2: Assembling app bundle..."
 # Info.plist with version
 cp "$SPM_DIR/Sources/Info.plist" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS/Info.plist"
+BUNDLE_VERSION="${VERSION%%-*}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$CONTENTS/Info.plist"
+if [ "$APPSTORE" = false ] && [ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]; then
+    /usr/libexec/PlistBuddy -c "Add :SUFeedURL string https://github.com/Nourchkair/Sawti/releases/latest/download/appcast.xml" \
+        "$CONTENTS/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :SUFeedURL https://github.com/Nourchkair/Sawti/releases/latest/download/appcast.xml" \
+            "$CONTENTS/Info.plist"
+    /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $SPARKLE_PUBLIC_ED_KEY" \
+        "$CONTENTS/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_ED_KEY" "$CONTENTS/Info.plist"
+    /usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool true" "$CONTENTS/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :SUEnableAutomaticChecks true" "$CONTENTS/Info.plist"
+    /usr/libexec/PlistBuddy -c "Add :SUAutomaticallyUpdate bool true" "$CONTENTS/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :SUAutomaticallyUpdate true" "$CONTENTS/Info.plist"
+    /usr/libexec/PlistBuddy -c "Add :SUAllowsAutomaticUpdates bool true" "$CONTENTS/Info.plist" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Set :SUAllowsAutomaticUpdates true" "$CONTENTS/Info.plist"
+elif [ "$APPSTORE" = false ]; then
+    echo "  Sparkle is not configured in this build; set SPARKLE_PUBLIC_ED_KEY to enable updates."
+fi
 
 # App icon
 ICONSET_SRC="$SPM_DIR/Sources/Assets.xcassets/AppIcon.appiconset"
@@ -192,6 +230,11 @@ if [ "$NOTARIZE" = true ]; then
     # shellcheck source=lib/bundle-ids.sh
     source "$SCRIPT_DIR/lib/bundle-ids.sh"
     prepare_signing "$APP_BUNDLE" "$ENTITLEMENTS" "$RELEASE_BUNDLE_ID" "$DEVELOPER_ID"
+
+    if [ -d "$CONTENTS/Frameworks/Sparkle.framework" ]; then
+        codesign --force --deep --sign "$SIGNING_IDENTITY" \
+            --options runtime --timestamp "$CONTENTS/Frameworks/Sparkle.framework"
+    fi
 
     codesign --force --sign "$SIGNING_IDENTITY" --identifier "$RELEASE_BUNDLE_ID" \
         --options runtime --timestamp --entitlements "$ENTITLEMENTS" \
