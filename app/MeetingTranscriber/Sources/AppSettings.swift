@@ -99,6 +99,36 @@ enum ProtocolProvider: String, CaseIterable {
     }
 }
 
+enum WatchSessionDuration: String, CaseIterable, Identifiable {
+    case never
+    case oneHour
+    case twoHours
+    case fourHours
+    case eightHours
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .never: "Never"
+        case .oneHour: "1 hour"
+        case .twoHours: "2 hours"
+        case .fourHours: "4 hours"
+        case .eightHours: "8 hours"
+        }
+    }
+
+    var seconds: Int? {
+        switch self {
+        case .never: nil
+        case .oneHour: 60 * 60
+        case .twoHours: 2 * 60 * 60
+        case .fourHours: 4 * 60 * 60
+        case .eightHours: 8 * 60 * 60
+        }
+    }
+}
+
 @Observable
 final class AppSettings {
     /// Backing store. Production callers pass nothing → `.standard`. Tests
@@ -176,6 +206,12 @@ final class AppSettings {
     /// Auto-start watching on app launch.
     var autoWatch: Bool {
         didSet { defaults.set(autoWatch, forKey: "autoWatch") }
+    }
+
+    /// Stop meeting detection after this much time. A recording already in
+    /// progress is allowed to finish before watching stops.
+    var watchSessionDuration: WatchSessionDuration {
+        didSet { defaults.set(watchSessionDuration.rawValue, forKey: "watchSessionDuration") }
     }
 
     // MARK: - Recording
@@ -601,6 +637,8 @@ final class AppSettings {
         watchWhatsApp = defaults.object(forKey: "watchWhatsApp") as? Bool ?? false
         watchCustomApps = defaults.stringArray(forKey: "watchCustomApps") ?? []
         autoWatch = defaults.object(forKey: "autoWatch") as? Bool ?? false
+        watchSessionDuration = defaults.string(forKey: "watchSessionDuration")
+            .flatMap(WatchSessionDuration.init(rawValue:)) ?? .never
 
         pollInterval = defaults.object(forKey: "pollInterval") as? Double ?? 3.0
         endGrace = defaults.object(forKey: "endGrace") as? Double ?? 15.0
@@ -687,9 +725,9 @@ final class AppSettings {
         #if !APPSTORE
             debugRPCEnabled = defaults.object(forKey: "debugRPCEnabled") as? Bool ?? false
         #endif
-        // Alpha runs without update checks by default so its core can be
-        // exercised offline and does not make an unsolicited network request.
-        checkForUpdates = defaults.object(forKey: "checkForUpdates") as? Bool ?? false
+        // New installs check for updates automatically. Users who explicitly
+        // turned checks off keep that preference across upgrades.
+        checkForUpdates = defaults.object(forKey: "checkForUpdates") as? Bool ?? true
         includePreReleases = defaults.object(forKey: "includePreReleases") as? Bool ?? false
         refreshCustomVocabularyValidation()
     }

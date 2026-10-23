@@ -65,7 +65,8 @@ struct MenuBarView: View {
         watchControls
         processingQueue
 
-        if status?.protocolPath != nil || updateChecker?.availableUpdate != nil {
+        if status?.protocolPath != nil
+            || (updateChecker?.availableUpdate != nil && updateChecker?.canInstallUpdates == true) {
             Divider()
             protocolActions
             updateSection
@@ -215,12 +216,12 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder private var updateSection: some View {
-        if let update = updateChecker?.availableUpdate {
+        if let update = updateChecker?.availableUpdate, updateChecker?.canInstallUpdates == true {
             Button {
-                NSWorkspace.shared.open(update.dmgURL ?? update.htmlURL)
+                updateChecker?.installAvailableUpdate()
             } label: {
                 Label(
-                    "Update Available: \(update.tagName)",
+                    "Install Update & Restart: \(update.tagName)",
                     systemImage: "arrow.down.circle.fill",
                 )
             }

@@ -129,7 +129,7 @@ struct RecordingLibraryWindow: View {
                     isTranscribing: isTranscribing(selectedEntry),
                     onWorkspaceChanged: { id in updateWorkspace(for: selectedEntry, to: id) },
                     onTitleChanged: { title in updateTitle(for: selectedEntry, to: title) },
-                    onEditedAudioSaved: { edits in saveEditedAudio(edits, for: selectedEntry) },
+                    onEditedAudioSaved: { edits, mode in saveEditedAudio(edits, mode: mode, for: selectedEntry) },
                     onRequestDelete: {
                         itemPendingDelete = selectedEntry
                         isShowingDeleteConfirmation = true
@@ -470,9 +470,21 @@ struct RecordingLibraryWindow: View {
         }
     }
 
-    private func saveEditedAudio(_ edits: [RecordingEditedAudio], for item: RecordingLibraryItem) -> Bool {
+    private func saveEditedAudio(
+        _ edits: [RecordingEditedAudio],
+        mode: RecordingAudioEditSaveMode,
+        for item: RecordingLibraryItem,
+    ) -> Bool {
         do {
-            try RecordingLibraryIndex.saveEditedAudio(edits, for: item, outputDirectory: outputDirectory)
+            let requests = try RecordingLibraryIndex.saveAudioEdits(
+                edits,
+                mode: mode,
+                for: item,
+                outputDirectory: outputDirectory,
+            )
+            for request in requests {
+                onTranscribe(request.recordingID, [request.audioURL])
+            }
             Task { await reload() }
             return true
         } catch {
@@ -702,7 +714,7 @@ private struct RecordingLibraryDetail: View {
     let isTranscribing: Bool
     let onWorkspaceChanged: (UUID?) -> Void
     let onTitleChanged: (String) -> Void
-    let onEditedAudioSaved: ([RecordingEditedAudio]) -> Bool
+    let onEditedAudioSaved: ([RecordingEditedAudio], RecordingAudioEditSaveMode) -> Bool
     let onRequestDelete: () -> Void
 
     @StateObject private var playback = RecordingAudioPlayback()
@@ -710,6 +722,7 @@ private struct RecordingLibraryDetail: View {
     @State private var transcriptLoadFailed = false
     @State private var titleDraft = ""
     @State private var isShowingAudioEditor = false
+    @State private var isOriginalAudioExpanded = false
 
     private var transcriptionButtonTitle: String {
         if isTranscribing { return "Processing…" }
@@ -753,6 +766,7 @@ private struct RecordingLibraryDetail: View {
             primaryActions
             artifactActions
             playbackTimeline
+            originalAudioSection
             editedAudioSection
             bookmarksSection
             recordingStatus
@@ -831,7 +845,7 @@ private struct RecordingLibraryDetail: View {
                     let isPlayingAudio = playback.isPlaying && playback.playingURL == audioURL
                     Label(isPlayingAudio ? "Stop Audio" : "Play Recording", systemImage: isPlayingAudio ? "stop.fill" : "play.fill")
                 }
-                .help("Play the original recording")
+                .help("Play the current version of this recording")
 
                 Button("Edit Audio…", systemImage: "scissors") {
                     isShowingAudioEditor = true
@@ -869,6 +883,52 @@ private struct RecordingLibraryDetail: View {
             .help(canDelete ? "Delete this recording and its Sawti files" : "Wait for processing to finish before deleting")
         }
         .buttonStyle(.bordered)
+    }
+
+    @ViewBuilder private var originalAudioSection: some View {
+        if item.originalAudioURL != nil || item.originalTranscriptVersionURL != nil
+            || item.originalProtocolURL != nil {
+            DisclosureGroup("See Original Audio", isExpanded: $isOriginalAudioExpanded) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let originalAudioURL = item.originalAudioURL {
+                        Button {
+                            if playback.isPlaying, playback.playingURL == originalAudioURL {
+                                playback.stop()
+                            } else {
+                                playback.play(originalAudioURL, outputDirectory: outputDirectory)
+                            }
+                        } label: {
+                            let isPlayingOriginal = playback.isPlaying && playback.playingURL == originalAudioURL
+                            Label(
+                                isPlayingOriginal ? "Stop Original Audio" : "Play Original Audio",
+                                systemImage: isPlayingOriginal ? "stop.fill" : "play.fill",
+                            )
+                        }
+                        .buttonStyle(.link)
+                    }
+                    if let transcriptURL = item.originalTranscriptVersionURL {
+                        Button("Open Original Transcript", systemImage: "doc.text") {
+                            onOpenTranscript(transcriptURL)
+                        }
+                        .buttonStyle(.link)
+                    }
+                    if let protocolURL = item.originalProtocolURL {
+                        Button("Open Original Notes", systemImage: "doc.richtext") {
+                            onOpenTranscript(protocolURL)
+                        }
+                        .buttonStyle(.link)
+                    }
+                    if let rawTranscriptURL = item.originalTranscriptURL {
+                        Button("Open Original ASR Transcript", systemImage: "text.alignleft") {
+                            onOpenTranscript(rawTranscriptURL)
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
+                .padding(.top, 6)
+            }
+            .help("Review audio, transcript, and notes from before the first replacement edit")
+        }
     }
 
     @ViewBuilder private var playbackTimeline: some View {

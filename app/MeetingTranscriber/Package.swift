@@ -1,6 +1,27 @@
 // swift-tools-version: 6.2
 
 import PackageDescription
+import Foundation
+
+let appStoreBuild = ProcessInfo.processInfo.environment["SAWTI_APPSTORE_BUILD"] == "1"
+let packageDependencies: [Package.Dependency] = [
+    .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.5"),
+    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.19.1"),
+    .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
+    .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.13.4"),
+    .package(path: "../../tools/audiotap"),
+] + (appStoreBuild ? [] : [
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0"),
+])
+
+let appDependencies: [Target.Dependency] = [
+    .product(name: "WhisperKit", package: "WhisperKit"),
+    .product(name: "FluidAudio", package: "FluidAudio"),
+    .product(name: "AudioTapLib", package: "audiotap"),
+    "CLocalVQE",
+] + (appStoreBuild ? [] : [
+    .product(name: "Sparkle", package: "Sparkle"),
+])
 
 let package = Package(
     name: "MeetingTranscriber",
@@ -9,13 +30,7 @@ let package = Package(
         .executable(name: "MeetingTranscriber", targets: ["MeetingTranscriber"]),
         .executable(name: "SawtiCaptureHelper", targets: ["SawtiCaptureHelper"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.5"),
-        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.19.1"),
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.0.0"),
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.13.4"),
-        .package(path: "../../tools/audiotap"),
-    ],
+    dependencies: packageDependencies,
     targets: [
         // LocalVQE echo-cancellation library (C API over a static xcframework).
         // SwiftPM downloads the artifact from a pinned release asset and
@@ -46,12 +61,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "MeetingTranscriber",
-            dependencies: [
-                .product(name: "WhisperKit", package: "WhisperKit"),
-                .product(name: "FluidAudio", package: "FluidAudio"),
-                .product(name: "AudioTapLib", package: "audiotap"),
-                "CLocalVQE",
-            ],
+            dependencies: appDependencies,
             path: "Sources",
             // Assets.xcassets is compiled by `actool` in scripts/build_release.sh,
             // not by SPM. Excluding silences "unhandled file" warnings without

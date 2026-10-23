@@ -264,6 +264,7 @@ struct MeetingTranscriberApp: App {
                 parakeetEngine: appState.engines.parakeetEngine,
                 updateChecker: appState.updateChecker,
                 notificationVisibility: appState.permissions.notificationVisibility,
+                onWatchDurationChanged: { appState.watching.watchSessionDurationDidChange() },
                 // Share the pipeline's actor instance so both writers serialise on
                 // the same `recognition_log.jsonl` file. Fallback only fires in the
                 // test-only PipelineQueue init that intentionally leaves it nil.

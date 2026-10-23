@@ -65,11 +65,28 @@ struct RecordingLibraryMetadata: Codable, Sendable {
     let workspaceID: UUID?
     let editedAudio: [RecordingEditedAudio]?
     let audioFilename: String?
+    /// The immutable audio that was current when the first edit replaced the
+    /// default recording. Stored inside recordings/ so imported sources remain
+    /// available even if their original external path changes.
+    let originalAudioFilename: String?
+    /// Human-editable transcript paired with the immutable original audio.
+    let originalTranscriptFilename: String?
+    /// Raw ASR transcript paired with the immutable original audio.
+    let originalRawTranscriptFilename: String?
+    /// Generated protocol/notes paired with the immutable original audio.
+    let originalProtocolFilename: String?
+    /// True when the active library audio is an edited or imported single-file
+    /// source and should be transcribed by itself instead of merging the old
+    /// dual-source capture tracks from a recording sidecar.
+    let audioIsEdited: Bool?
     let recordingSource: RecordingSourceKind?
 
     private enum CodingKeys: String, CodingKey {
         case version, title, appName, recordedAt, participants, category, course
-        case customTitle, workspaceID, editedAudio, audioFilename, recordingSource
+        case customTitle, workspaceID, editedAudio, audioFilename
+        case originalAudioFilename, originalTranscriptFilename, originalRawTranscriptFilename
+        case originalProtocolFilename
+        case audioIsEdited, recordingSource
     }
 
     init(
@@ -82,6 +99,11 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         workspaceID: UUID? = nil,
         editedAudio: [RecordingEditedAudio]? = nil,
         audioFilename: String? = nil,
+        originalAudioFilename: String? = nil,
+        originalTranscriptFilename: String? = nil,
+        originalRawTranscriptFilename: String? = nil,
+        originalProtocolFilename: String? = nil,
+        audioIsEdited: Bool? = nil,
         recordingSource: RecordingSourceKind? = nil,
     ) {
         version = Self.currentVersion
@@ -94,6 +116,11 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         self.workspaceID = workspaceID
         self.editedAudio = editedAudio
         self.audioFilename = audioFilename
+        self.originalAudioFilename = originalAudioFilename
+        self.originalTranscriptFilename = originalTranscriptFilename
+        self.originalRawTranscriptFilename = originalRawTranscriptFilename
+        self.originalProtocolFilename = originalProtocolFilename
+        self.audioIsEdited = audioIsEdited
         self.recordingSource = recordingSource
     }
 
@@ -110,6 +137,11 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         workspaceID = try container.decodeIfPresent(UUID.self, forKey: .workspaceID)
         editedAudio = try container.decodeIfPresent([RecordingEditedAudio].self, forKey: .editedAudio)
         audioFilename = try container.decodeIfPresent(String.self, forKey: .audioFilename)
+        originalAudioFilename = try container.decodeIfPresent(String.self, forKey: .originalAudioFilename)
+        originalTranscriptFilename = try container.decodeIfPresent(String.self, forKey: .originalTranscriptFilename)
+        originalRawTranscriptFilename = try container.decodeIfPresent(String.self, forKey: .originalRawTranscriptFilename)
+        originalProtocolFilename = try container.decodeIfPresent(String.self, forKey: .originalProtocolFilename)
+        audioIsEdited = try container.decodeIfPresent(Bool.self, forKey: .audioIsEdited)
         recordingSource = try container.decodeIfPresent(RecordingSourceKind.self, forKey: .recordingSource)
     }
 
@@ -125,6 +157,11 @@ struct RecordingLibraryMetadata: Codable, Sendable {
         try container.encodeIfPresent(workspaceID, forKey: .workspaceID)
         try container.encodeIfPresent(editedAudio, forKey: .editedAudio)
         try container.encodeIfPresent(audioFilename, forKey: .audioFilename)
+        try container.encodeIfPresent(originalAudioFilename, forKey: .originalAudioFilename)
+        try container.encodeIfPresent(originalTranscriptFilename, forKey: .originalTranscriptFilename)
+        try container.encodeIfPresent(originalRawTranscriptFilename, forKey: .originalRawTranscriptFilename)
+        try container.encodeIfPresent(originalProtocolFilename, forKey: .originalProtocolFilename)
+        try container.encodeIfPresent(audioIsEdited, forKey: .audioIsEdited)
         try container.encodeIfPresent(recordingSource, forKey: .recordingSource)
     }
 
@@ -163,8 +200,12 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
     let recordingSource: RecordingSourceKind
     let bookmarks: [RecordingBookmark]
     let editedAudio: [RecordingEditedAudio]
+    let isEditedAudio: Bool
     let transcriptURL: URL?
     let originalTranscriptURL: URL?
+    let originalAudioURL: URL?
+    let originalTranscriptVersionURL: URL?
+    let originalProtocolURL: URL?
     let protocolURL: URL?
     let audioURL: URL?
     let pipelineStatus: String?
@@ -188,6 +229,10 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
             guard let filename else { return nil }
             let url = directory.appendingPathComponent(filename)
             return fileManager.fileExists(atPath: url.path) ? url : nil
+        }
+
+        if isEditedAudio, let audioURL, fileManager.fileExists(atPath: audioURL.path) {
+            return [audioURL]
         }
 
         if let sidecar = RecordingSidecar.read(fromDirectory: directory, basename: id) {
@@ -217,8 +262,12 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
             recordingSource: recordingSource,
             bookmarks: bookmarks,
             editedAudio: editedAudio,
+            isEditedAudio: isEditedAudio,
             transcriptURL: job.transcriptPath ?? transcriptURL,
             originalTranscriptURL: originalTranscriptURL,
+            originalAudioURL: originalAudioURL,
+            originalTranscriptVersionURL: originalTranscriptVersionURL,
+            originalProtocolURL: originalProtocolURL,
             protocolURL: job.protocolPath ?? protocolURL,
             audioURL: audioURL ?? job.mixPath,
             pipelineStatus: job.state.label,
@@ -239,8 +288,12 @@ struct RecordingLibraryItem: Identifiable, Equatable, Sendable {
             recordingSource: job.recordingSource ?? .inferred(appName: job.appName),
             bookmarks: job.bookmarks ?? [],
             editedAudio: [],
+            isEditedAudio: false,
             transcriptURL: job.transcriptPath,
             originalTranscriptURL: job.rawTranscriptPath,
+            originalAudioURL: nil,
+            originalTranscriptVersionURL: nil,
+            originalProtocolURL: nil,
             protocolURL: job.protocolPath,
             audioURL: job.mixPath,
             pipelineStatus: job.state.label,
@@ -264,10 +317,15 @@ enum RecordingLibraryIndex {
         var recordingSource: RecordingSourceKind = .imported
         var bookmarks: [RecordingBookmark] = []
         var editedAudio: [RecordingEditedAudio] = []
+        var isEditedAudio = false
         var transcriptURL: URL?
         var originalTranscriptURL: URL?
+        var originalAudioURL: URL?
+        var originalTranscriptVersionURL: URL?
+        var originalProtocolURL: URL?
         var protocolURL: URL?
         var audioURL: URL?
+        var hasPreferredAudioURL = false
 
         func item() -> RecordingLibraryItem {
             RecordingLibraryItem(
@@ -282,8 +340,12 @@ enum RecordingLibraryIndex {
                 recordingSource: recordingSource,
                 bookmarks: bookmarks,
                 editedAudio: editedAudio,
+                isEditedAudio: isEditedAudio,
                 transcriptURL: transcriptURL,
                 originalTranscriptURL: originalTranscriptURL,
+                originalAudioURL: originalAudioURL,
+                originalTranscriptVersionURL: originalTranscriptVersionURL,
+                originalProtocolURL: originalProtocolURL,
                 protocolURL: protocolURL,
                 audioURL: audioURL,
                 pipelineStatus: nil,
@@ -351,8 +413,22 @@ enum RecordingLibraryIndex {
                 entry.workspaceID = metadata.workspaceID
                 entry.legacyCategory = metadata.category
                 entry.editedAudio = metadata.editedAudio ?? []
+                entry.isEditedAudio = metadata.audioIsEdited ?? false
                 if let filename = metadata.audioFilename {
                     entry.audioURL = recordingsDirectory.appendingPathComponent(filename)
+                    entry.hasPreferredAudioURL = true
+                }
+                if let filename = metadata.originalAudioFilename {
+                    entry.originalAudioURL = recordingsDirectory.appendingPathComponent(filename)
+                }
+                if let filename = metadata.originalTranscriptFilename {
+                    entry.originalTranscriptVersionURL = recordingsDirectory.appendingPathComponent(filename)
+                }
+                if let filename = metadata.originalProtocolFilename {
+                    entry.originalProtocolURL = recordingsDirectory.appendingPathComponent(filename)
+                }
+                if let filename = metadata.originalRawTranscriptFilename {
+                    entry.originalTranscriptURL = recordingsDirectory.appendingPathComponent(filename)
                 }
                 entry.recordingSource = metadata.recordingSource ?? .inferred(appName: metadata.appName)
                 builders[id] = entry
@@ -374,11 +450,14 @@ enum RecordingLibraryIndex {
                     trigger: metadata.trigger,
                     appName: metadata.appName,
                 )
-                entry.audioURL = recordingsDirectory.appendingPathComponent(metadata.files.mix)
+                if !entry.hasPreferredAudioURL {
+                    entry.audioURL = recordingsDirectory.appendingPathComponent(metadata.files.mix)
+                }
                 builders[id] = entry
             } else if let (id, audioURL) = audioFile(file) {
                 var entry = builder(for: id, source: file)
-                if entry.audioURL == nil || audioURL.lastPathComponent.hasSuffix("_mix.wav") {
+                if !entry.hasPreferredAudioURL,
+                   entry.audioURL == nil || audioURL.lastPathComponent.hasSuffix("_mix.wav") {
                     entry.audioURL = audioURL
                 }
                 builders[id] = entry
@@ -415,6 +494,11 @@ enum RecordingLibraryIndex {
             workspaceID: workspaceID,
             editedAudio: old?.editedAudio ?? item.editedAudio,
             audioFilename: old?.audioFilename,
+            originalAudioFilename: old?.originalAudioFilename,
+            originalTranscriptFilename: old?.originalTranscriptFilename,
+            originalRawTranscriptFilename: old?.originalRawTranscriptFilename,
+            originalProtocolFilename: old?.originalProtocolFilename,
+            audioIsEdited: old?.audioIsEdited,
             recordingSource: item.recordingSource,
         ).write(toDirectory: recordingsDirectory, basename: item.id)
     }
@@ -435,28 +519,11 @@ enum RecordingLibraryIndex {
             workspaceID: old?.workspaceID ?? item.workspaceID,
             editedAudio: old?.editedAudio ?? item.editedAudio,
             audioFilename: old?.audioFilename,
-            recordingSource: item.recordingSource,
-        ).write(toDirectory: recordingsDirectory, basename: item.id)
-    }
-
-    static func saveEditedAudio(
-        _ editedAudio: [RecordingEditedAudio],
-        for item: RecordingLibraryItem,
-        outputDirectory: URL,
-    ) throws {
-        let openedScope = outputDirectory.startAccessingSecurityScopedResource()
-        defer { if openedScope { outputDirectory.stopAccessingSecurityScopedResource() } }
-        let recordingsDirectory = outputDirectory.appendingPathComponent("recordings", isDirectory: true)
-        let old = RecordingLibraryMetadata.read(fromDirectory: recordingsDirectory, basename: item.id)
-        try RecordingLibraryMetadata(
-            title: old?.title ?? item.sourceTitle,
-            appName: old?.appName ?? item.appName ?? "Unknown",
-            recordedAt: item.recordedAt,
-            participants: item.participants,
-            customTitle: old?.customTitle,
-            workspaceID: old?.workspaceID ?? item.workspaceID,
-            editedAudio: editedAudio,
-            audioFilename: old?.audioFilename,
+            originalAudioFilename: old?.originalAudioFilename,
+            originalTranscriptFilename: old?.originalTranscriptFilename,
+            originalRawTranscriptFilename: old?.originalRawTranscriptFilename,
+            originalProtocolFilename: old?.originalProtocolFilename,
+            audioIsEdited: old?.audioIsEdited,
             recordingSource: item.recordingSource,
         ).write(toDirectory: recordingsDirectory, basename: item.id)
     }
@@ -474,8 +541,12 @@ enum RecordingLibraryIndex {
             recordingSource: item.recordingSource,
             bookmarks: item.bookmarks,
             editedAudio: item.editedAudio,
+            isEditedAudio: item.isEditedAudio,
             transcriptURL: item.transcriptURL,
             originalTranscriptURL: item.originalTranscriptURL,
+            originalAudioURL: item.originalAudioURL,
+            originalTranscriptVersionURL: item.originalTranscriptVersionURL,
+            originalProtocolURL: item.originalProtocolURL,
             protocolURL: item.protocolURL,
             audioURL: item.audioURL,
             pipelineStatus: item.pipelineStatus,
@@ -513,6 +584,9 @@ enum RecordingLibraryIndex {
                 || RecordingFileSuffix.stripAppRaw(from: name) == item.id
                 || name.hasPrefix("\(item.id)_source.")
                 || name.hasPrefix("\(item.id)_edit_")
+                || name.hasPrefix("\(item.id)_original_audio_")
+                || name.hasPrefix("\(item.id)_original_transcript_")
+                || name.hasPrefix("\(item.id)_original_protocol_")
                 || name == "\(item.id)\(SpeakerNamingStore.namingJSONSuffix)"
                 || name == "\(item.id)\(SpeakerNamingStore.segmentsSuffix)"
             if belongsToRecording { include(file, directlyIn: recordingsDirectory) }
@@ -543,7 +617,7 @@ enum RecordingLibraryIndex {
 
         // Include the exact paths held by this Library row as well, but keep
         // them constrained to the Sawti-owned output subfolders.
-        for file in [item.transcriptURL, item.originalTranscriptURL, item.protocolURL].compactMap(\.self) {
+        for file in [item.transcriptURL, item.originalTranscriptURL, item.protocolURL, item.originalProtocolURL].compactMap(\.self) {
             include(file, directlyIn: protocolsDirectory)
             if ["txt", "md"].contains(file.pathExtension.lowercased()) {
                 include(
@@ -553,6 +627,14 @@ enum RecordingLibraryIndex {
             }
         }
         if let audioURL = item.audioURL { include(audioURL, directlyIn: recordingsDirectory) }
+        if let originalAudioURL = item.originalAudioURL { include(originalAudioURL, directlyIn: recordingsDirectory) }
+        if let originalTranscriptVersionURL = item.originalTranscriptVersionURL {
+            include(originalTranscriptVersionURL, directlyIn: recordingsDirectory)
+            include(
+                originalTranscriptVersionURL.deletingPathExtension().appendingPathExtension("editor.json"),
+                directlyIn: recordingsDirectory,
+            )
+        }
         for asset in item.editedAudio {
             include(recordingsDirectory.appendingPathComponent(asset.filename), directlyIn: recordingsDirectory)
         }

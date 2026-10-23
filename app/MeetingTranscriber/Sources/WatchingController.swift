@@ -35,6 +35,12 @@ final class WatchingController {
     /// finishes.
     private var startTask: Task<Void, Never>?
 
+    /// The optional watch-session limit only stops detection; it never ends a
+    /// meeting recording. If the limit expires during capture, the state
+    /// callback stops the loop when that recording returns to `.watching`.
+    private var watchDurationTask: Task<Void, Never>?
+    private var stopWatchingAtNextWatchingState = false
+
     /// See `defaultStartJoinTimeout`.
     private let startJoinTimeout: Duration
 
@@ -213,6 +219,7 @@ final class WatchingController {
             // `.failed` — a 503 the docs describe as "did not settle within 20
             // seconds" — and silently no-op the menu-bar toggle.
             guard !loop.isManualRecording else { return }
+            cancelWatchDuration()
             loop.stop()
             watchLoop = nil
         } else {
@@ -269,8 +276,37 @@ final class WatchingController {
 
                 watchLoop = loop
                 loop.start()
+                scheduleWatchDuration(for: loop)
             }
         }
+    }
+
+    private func scheduleWatchDuration(for loop: WatchLoop) {
+        cancelWatchDuration()
+        guard let seconds = settings.watchSessionDuration.seconds else { return }
+
+        watchDurationTask = Task { @MainActor [weak self, weak loop] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled, let self, let loop,
+                  self.watchLoop === loop, loop.isActive else { return }
+
+            if loop.state == .recording {
+                self.stopWatchingAtNextWatchingState = true
+            } else {
+                self.toggleWatching(userInitiated: false)
+            }
+        }
+    }
+
+    func watchSessionDurationDidChange() {
+        guard let loop = watchLoop, loop.isActive, !loop.isManualRecording else { return }
+        scheduleWatchDuration(for: loop)
+    }
+
+    private func cancelWatchDuration() {
+        watchDurationTask?.cancel()
+        watchDurationTask = nil
+        stopWatchingAtNextWatchingState = false
     }
 
     /// The permissions a watch start asks for, in the order the user meets
@@ -453,6 +489,7 @@ final class WatchingController {
                 )
                 return .blockedByActiveRecording
             }
+            cancelWatchDuration()
             loop.stop()
             watchLoop = nil
         }
@@ -582,6 +619,12 @@ final class WatchingController {
 
             default:
                 self?.channelHealth.stop()
+            }
+
+            if newState == .watching,
+               self?.stopWatchingAtNextWatchingState == true,
+               let self, let loop, self.watchLoop === loop {
+                self.toggleWatching(userInitiated: false)
             }
         }
     }

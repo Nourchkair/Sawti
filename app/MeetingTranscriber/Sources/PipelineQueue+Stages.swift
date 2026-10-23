@@ -913,6 +913,11 @@ extension PipelineQueue {
                 workspaceID: existing?.workspaceID,
                 editedAudio: existing?.editedAudio,
                 audioFilename: audioFilename,
+                originalAudioFilename: existing?.originalAudioFilename,
+                originalTranscriptFilename: existing?.originalTranscriptFilename,
+                originalRawTranscriptFilename: existing?.originalRawTranscriptFilename,
+                originalProtocolFilename: existing?.originalProtocolFilename,
+                audioIsEdited: existing?.audioIsEdited,
                 recordingSource: ctx.recordingSource ?? .inferred(appName: ctx.appName),
             ).write(toDirectory: recordingsDir, basename: ctx.slug)
         } catch {

@@ -6,7 +6,7 @@ struct RecordingAudioEditorSheet: View {
     let item: RecordingLibraryItem
     let sourceURL: URL
     let outputDirectory: URL
-    let onSave: ([RecordingEditedAudio]) -> Bool
+    let onSave: ([RecordingEditedAudio], RecordingAudioEditSaveMode) -> Bool
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var preview = RecordingAudioEditorPreview()
@@ -20,6 +20,7 @@ struct RecordingAudioEditorSheet: View {
     @State private var isPreparing = true
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var saveMode: RecordingAudioEditSaveMode = .replaceOriginal
 
     private var mainRange: ClosedRange<TimeInterval> {
         let visibleDuration = min(duration, zoomWindowDuration)
@@ -70,6 +71,7 @@ struct RecordingAudioEditorSheet: View {
             waveformSection
             rangeControls
             playbackControls
+            saveModePicker
             if let message = preview.error ?? errorMessage {
                 Text(message)
                     .font(.callout)
@@ -233,19 +235,50 @@ struct RecordingAudioEditorSheet: View {
                 .keyboardShortcut(.cancelAction)
                 .disabled(isWorking)
             Spacer()
-            Button("Split at Playhead", systemImage: "scissors") {
+            Button(
+                saveMode == .replaceOriginal ? "Replace with Part 1" : "Save Both Separately",
+                systemImage: "scissors",
+            ) {
                 Task { await splitAtPlayhead() }
             }
             .disabled(isWorking || !validSplit)
-            .help("Save the selected range as two linked audio clips")
-            Button("Save Trimmed Copy", systemImage: "waveform.badge.minus") {
+            .help(saveMode == .replaceOriginal
+                ? "Use Part 1 as the recording and save Part 2 as a separate recording"
+                : "Create two separate recordings from the selected range")
+            Button(
+                saveMode == .replaceOriginal ? "Replace Recording" : "Save as Separate Recording",
+                systemImage: "waveform.badge.minus",
+            ) {
                 Task { await saveTrimmedCopy() }
             }
             .keyboardShortcut(.defaultAction)
             .disabled(isWorking || !validTrim || (startOffset <= 0 && endOffset >= duration))
-            .help("Save only the selected range as a new audio copy")
+            .help(saveMode == .replaceOriginal
+                ? "Make this edited audio the default and transcribe it again"
+                : "Create a new recording from only the selected range")
         }
         .buttonStyle(.bordered)
+    }
+
+    private var saveModePicker: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Picker("Save edited audio", selection: $saveMode) {
+                ForEach(RecordingAudioEditSaveMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            Text(saveMode == .replaceOriginal
+                ? "The original audio and transcript stay available under See Original Audio."
+                : "The current recording remains unchanged; each edited clip gets its own transcript.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if saveMode == .replaceOriginal && validSplit {
+                Text("For a split, Part 1 replaces the current recording and Part 2 becomes a separate recording.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func preciseTimeField(title: String, value: Binding<TimeInterval>) -> some View {
@@ -317,7 +350,7 @@ struct RecordingAudioEditorSheet: View {
 
         do {
             try await export(start: startOffset, end: endOffset, to: outputURL)
-            guard onSave(item.editedAudio + [edit]) else {
+            guard onSave([edit], saveMode) else {
                 try? FileManager.default.removeItem(at: outputURL)
                 throw RecordingAudioEditorError.couldNotSave
             }
@@ -358,7 +391,7 @@ struct RecordingAudioEditorSheet: View {
         do {
             try await export(start: first.startOffset, end: first.endOffset, to: firstURL)
             try await export(start: second.startOffset, end: second.endOffset, to: secondURL)
-            guard onSave(item.editedAudio + [first, second]) else {
+            guard onSave([first, second], saveMode) else {
                 throw RecordingAudioEditorError.couldNotSave
             }
             dismiss()

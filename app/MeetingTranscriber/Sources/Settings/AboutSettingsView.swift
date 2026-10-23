@@ -30,6 +30,9 @@ struct AboutSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: settings.checkForUpdates) { _, enabled in
+            updateChecker?.setAutomaticChecksEnabled(enabled)
+        }
     }
 
     // swiftlint:disable:next force_unwrapping
@@ -60,6 +63,11 @@ struct AboutSettingsView: View {
         // swiftlint:disable:next closure_body_length
         Section("Updates") {
             Toggle("Check for Updates", isOn: $settings.checkForUpdates)
+                .help("When enabled, Sawti checks automatically and installs downloaded updates when the app can safely restart.")
+
+            Text("Sawti downloads updates in the background. It installs and relaunches after a safe quit, so you do not need to replace the app from a DMG.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if settings.checkForUpdates {
                 Toggle("Include Pre-Releases", isOn: $settings.includePreReleases)
@@ -99,13 +107,13 @@ struct AboutSettingsView: View {
                 }
             }
 
-            if let update = updateChecker.availableUpdate {
+            if let update = updateChecker.availableUpdate, updateChecker.canInstallUpdates {
                 Button {
-                    NSWorkspace.shared.open(update.dmgURL ?? update.htmlURL)
+                    updateChecker.installAvailableUpdate()
                 } label: {
                     Label(
-                        "Download \(update.tagName)",
-                        systemImage: "arrow.down.to.line",
+                        "Install & Restart to \(update.tagName)",
+                        systemImage: "arrow.down.circle",
                     )
                 }
             }

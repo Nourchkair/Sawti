@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
@@ -11,8 +12,11 @@ struct GeneralSettingsView: View {
     /// consent prompt is a notification), and nothing else in the app can say so
     /// without using the channel that is broken.
     var notificationVisibility: NotificationVisibility?
+    var onWatchDurationChanged: (() -> Void)?
 
     @State private var addAppRefusals: [String] = []
+    @State private var launchAtLoginEnabled = false
+    @State private var launchAtLoginMessage: String?
 
     /// Nil until the first permission check. The case, not just the message:
     /// how total the failure is decides the headline.
@@ -32,6 +36,38 @@ struct GeneralSettingsView: View {
                     .accessibilityIdentifier(A11yID.recordOnlyToggle)
                 if settings.recordOnly {
                     recordOnlyBanner
+                }
+            }
+
+            Section("Startup & Behavior") {
+                Toggle("Launch Sawti at Sign-In", isOn: Binding(
+                    get: { launchAtLoginEnabled },
+                    set: setLaunchAtLogin,
+                ))
+                Toggle("Start watching at launch", isOn: $settings.autoWatch)
+                Text("When enabled, Sawti starts meeting detection after it opens. This does not change the current session.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Stop watching after", selection: $settings.watchSessionDuration) {
+                    ForEach(WatchSessionDuration.allCases) { duration in
+                        Text(duration.label).tag(duration)
+                    }
+                }
+                Text("The timer starts when watching begins. Sawti stays open, and an active recording finishes before meeting detection stops.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let launchAtLoginMessage {
+                    HStack {
+                        Text(launchAtLoginMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if SMAppService.mainApp.status == .requiresApproval {
+                            Button("Open Login Items") {
+                                SMAppService.openSystemSettingsLoginItems()
+                            }
+                        }
+                    }
                 }
             }
 
@@ -84,6 +120,35 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .task { refreshLaunchAtLoginStatus() }
+        .onChange(of: settings.watchSessionDuration) { _, _ in onWatchDurationChanged?() }
+    }
+
+    private func refreshLaunchAtLoginStatus() {
+        let status = SMAppService.mainApp.status
+        launchAtLoginEnabled = status == .enabled || status == .requiresApproval
+        switch status {
+        case .requiresApproval:
+            launchAtLoginMessage = "Allow Sawti in System Settings to finish enabling sign-in launch."
+        case .notFound:
+            launchAtLoginMessage = "Move Sawti to Applications before enabling sign-in launch."
+        default:
+            launchAtLoginMessage = nil
+        }
+    }
+
+    private func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            refreshLaunchAtLoginStatus()
+        } catch {
+            refreshLaunchAtLoginStatus()
+            launchAtLoginMessage = "Could not update sign-in launch: \(error.localizedDescription)"
+        }
     }
 
     @ViewBuilder private var customApps: some View {
